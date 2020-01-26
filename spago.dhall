@@ -3,7 +3,7 @@
 , name =
     "password-generator"
 , dependencies =
-    [ "console", "effect", "halogen", "random", "stringutils" ]
+    [ "console", "effect", "halogen", "random", "stringutils", "psci-support" ]
 , packages =
     ./packages.dhall
 }

@@ -1,6 +1,6 @@
 # Password generator
 
-## Initial setup e first build
+## Initial setup and first build
 
 Compiling the [`purescript`](http://www.purescript.org) code, supposing [`nvm`](http://nvm.sh) is already installed, is as simple as typing:
 

@@ -12,7 +12,7 @@ import Data.Semigroup ((<>))
 -- import Data.Semiring ((+))
 -- import Data.Show (show)
 -- import Data.Symbol (SProxy(..))
-import Data.Unit (Unit, unit)
+import Data.Unit (Unit)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console (log)
 import Halogen as Halogen
@@ -48,7 +48,7 @@ component = Halogen.mkComponent {
                     -- :: HalogenQ Query Action Input ~> HalogenM State Action Slots Output m
 }
 
-render :: forall m. {-MonadAff m =>-} State -> Halogen.ComponentHTML Action Slots m
+render :: forall m. MonadAff m => State -> Halogen.ComponentHTML Action Slots m
 render (password) = HTML.div [HTML.Properties.class_ (Halogen.ClassName "password")] [
     HTML.h1  [] [HTML.text ("<password>: " <> password)],
     HTML.button [HTML.Properties.title "new", HTML.Events.onClick \_ -> Just Click] [HTML.text "new"]

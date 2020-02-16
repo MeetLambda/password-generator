@@ -4,17 +4,17 @@ import Components.Password as Components.Password
 import Components.Settings as Components.Settings
 import Control.Applicative (pure)
 import Control.Bind (bind, discard, class Bind)
-import Control.Category (identity)
+--import Control.Category (identity)
 import Control.Monad.State.Class (class MonadState)
-import Control.Semigroupoid ((<<<), (>>>))  --  (<<<) = Control.Semigroupoid.compose
+import Control.Semigroupoid ((<<<))         --  (<<<) = Control.Semigroupoid.compose
                                             --  (>>>) = Control.Semigroupoid.composeFlipped
-import Data.Eq (class Eq)
+--import Data.Eq (class Eq)
 import Data.Function (($), const)   --  ($)   = Data.Function.apply
-import Data.Maybe (Maybe(..), maybe)
-import Data.Ord (class Ord)
+import Data.Maybe (Maybe(..))
+--import Data.Ord (class Ord)
 import Data.Semigroup ((<>))
-import Data.Show (show)
-import Data.String.Utils (repeat)
+--import Data.Show (show)
+--import Data.String.Utils (repeat)
 import Data.Symbol (SProxy(..))
 import Data.Unit (Unit, unit)
 import Effect.Aff.Class (class MonadAff)

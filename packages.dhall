@@ -3,7 +3,7 @@ let upstream  = https://github.com/purescript/package-sets/releases/download/psc
 
 let overrides = {
     halogen         = upstream.halogen          // { version = "v5.0.0-rc.7" },
-    halogen-vdom    = upstream.halogen-vdom     // { version = "v6.1.1" }
+    halogen-vdom    = upstream.halogen-vdom     // { version = "v6.1.2" }
 }
 
 in  upstream // overrides --// additions

@@ -36,6 +36,7 @@ import Halogen as Halogen
 import Halogen.HTML as HTML
 import Halogen.HTML.Events as HTML.Events
 import Halogen.HTML.Properties as HTML.Properties
+import Main (defaultInput)
 
 type    Surface     = HTML.HTML
 data    Action      = NoAction
@@ -76,45 +77,45 @@ type FormData f = (
 newtype Form r f = Form (r (FormData f))
 derive instance newtypeForm :: Newtype (Form r f) _
 
--- formInput :: forall m. Monad m => Formless.Input' FormData m
--- formInput = {
---     initialInputs: Nothing,
---     validators: Form {
---         length: Formless.hoistFnE_ \str -> case Int.fromString str of
---             Nothing -> Left InvalidInt
---             Just n
---                 | n < 0  -> Left TooShort
---                 | n > 30 -> Left TooLong
---                 | otherwise -> Right n
---     }
--- }
+formInput :: forall m. Monad m => Formless.Input' Form m
+formInput = {
+    initialInputs: Nothing,
+    validators: Form {
+        length: Formless.hoistFnE_ \str -> case Int.fromString str of
+            Nothing -> Left (InvalidInt str)
+            Just n
+                | n < 0  -> Left (TooShort n)
+                | n > 30 -> Left (TooLong n)
+                | otherwise -> Right n
+    }
+}
 
 --            :: Formless.Component    Component HTML (Query form query slots) input msg m
--- formComponent :: forall m. MonadAff m => Formless.Component Form (Const Void) () Unit State m
--- formComponent = Formless.defaultSpec {
---         render = renderForm,
---         handleEvent = Formless.raiseResult
---     }
---     where
---     renderForm { form } = UIChunks.formContent_ [
---         UIChunks.input {
---             label: "Password Length",
---             -- help: Formless.getResult _length form # UIChunks.resultToHelp "How long do you want your password to be?",
---             -- help: Formless.getResult prx.length form # UIChunks.resultToHelp "How long do you want your password to be?",
---             placeholder: "32"
---         } [
---             -- HTML.Properties.value $ Formless.getInput prx.length form,
---             HTML.Properties.value $ Formless.getInput _length form,
---             --HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) prx.length
---             HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) _length
---         ],
---         UIChunks.buttonPrimary
---             [ HTML.Events.onClick \_ -> Just Formless.submit ]
---             [ HTML.text "Submit" ]
---     ]
---         where
---         --prx = Formless.mkSProxies (Formless.FormProxy :: _ Form)
---         _length = SProxy :: SProxy "length"
+formComponent :: forall m. MonadAff m => Formless.Component Form (Const Void) () Unit State m
+formComponent = Formless.component (const defaultInput) $ Formless.defaultSpec {
+        render = renderForm,
+        handleEvent = Formless.raiseResult
+    }
+    where
+    renderForm { form } = UIChunks.formContent_ [
+        UIChunks.input {
+            label: "Password Length",
+            help: Formless.getResult _length form # UIChunks.resultToHelp "How long do you want your password to be?",
+            -- help: Formless.getResult prx.length form # UIChunks.resultToHelp "How long do you want your password to be?",
+            placeholder: "32"
+        } [
+            -- HTML.Properties.value $ Formless.getInput prx.length form,
+            HTML.Properties.value $ Formless.getInput _length form,
+            --HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) prx.length
+            HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) _length
+        ],
+        UIChunks.buttonPrimary
+            [ HTML.Events.onClick \_ -> Just Formless.submit ]
+            [ HTML.text "Submit" ]
+    ]
+        where
+        --prx = Formless.mkSProxies (Formless.FormProxy :: _ Form)
+        _length = SProxy :: SProxy "length"
 
 -- ###########################################################################################
 

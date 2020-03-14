@@ -39,18 +39,20 @@ type    Settings    = Components.Settings.Settings
 
 type    Surface     = HTML.HTML
 
+-- public component types
+data    Query a     = NoQuery a
+type    Input       = Settings
+data    Output      = NoOutput      -- aka Message
+
+-- internal component types
 data    Action      = UpdateSettings        Components.Settings.Output
                     | UpdatePassword        Components.Password.Output
                     | GeneratePassword
                     | Click
-data    Query a     = NoQuery a
-type    Input       = Settings
-data    Output      = NoOutput      -- aka Message
 type    State       = {
     settings :: Settings,
     password :: String
 }
-
 --type    Slot = Halogen.Slot Query Output
 type Slots = (
     settings :: Components.Settings.Slot Unit,
@@ -63,22 +65,22 @@ _settings = SProxy
 _password :: SProxy "password"
 _password = SProxy
 
-initialState :: Input -> State
-initialState s = { settings: s, password: "" }
-
 -- component :: forall m. {- MonadAff m => -} Halogen.Component Surface Query Input Output m
 component :: forall m. MonadAff m => Halogen.Component Surface Query Input Output m
 component = Halogen.mkComponent {
-    initialState ,                                      -- :: Input -> State
-    render,                                             -- :: State -> Surface (ComponentSlot Surface Slots m Action) Action
-    eval: Halogen.mkEval $ Halogen.defaultEval {        -- :: HalogenQ query action input ~> HalogenM state action slots output m
-        handleAction = handleAction :: forall m.   MonadAff m => Action  → Halogen.HalogenM State Action Slots Output m Unit,
+    initialState: initialState,                    -- :: Input -> State
+    render:       render,                          -- :: State -> Surface (ComponentSlot Surface Slots m Action) Action
+    eval: Halogen.mkEval $ Halogen.defaultEval {   -- :: forall a. HalogenQ query action input ~> HalogenM state action slots output m a
+        handleAction = handleAction :: forall m.   MonadAff m => Action  -> Halogen.HalogenM State Action Slots Output m Unit,
         handleQuery  = handleQuery  :: forall m a. MonadAff m => Query a -> Halogen.HalogenM State Action Slots Output m (Maybe a),
         initialize   = initialize   :: Maybe Action,
         receive      = receive      :: Input -> Maybe Action,
         finalize     = finalize     :: Maybe Action
     }
 }
+
+initialState :: Input -> State
+initialState s = { settings: s, password: "inizio" }
 
 render :: forall m. MonadAff m => State -> Halogen.ComponentHTML Action Slots m
 render ({settings: settings, password: password}) = HTML.div [] [
@@ -94,8 +96,9 @@ render ({settings: settings, password: password}) = HTML.div [] [
 -- handleAction ∷ forall m. {- MonadAff m => -} Action → Halogen.HalogenM State Action Slots Output m Unit
 handleAction ∷ forall m. MonadAff m => Action → Halogen.HalogenM State Action Slots Output m Unit
 handleAction = case _ of
-    UpdateSettings (Components.Settings.UpdatedSettings settings) ->
+    UpdateSettings (Components.Settings.UpdatedSettings settings) -> do
         Halogen.modify_ (\state -> state { settings = settings })
+        generatePasswordAction
     UpdateSettings (Components.Settings.RegeneratePassword) -> do
         Halogen.liftEffect $ log "handleAction \"UpdatePassword\" (Settings)"
         generatePasswordAction
@@ -113,7 +116,8 @@ generatePasswordAction :: ∀ m. Bind m ⇒ MonadEffect m ⇒ MonadState State m
 generatePasswordAction = do
     settings :: Settings <- Halogen.gets _.settings
     password :: String <- pure (generatePassword settings)
-    Halogen.modify_ (\state -> state { password = "drowssap" })
+    -- Halogen.modify_ (\state -> state { password = "drowssap" })
+    Halogen.modify_ (\state -> state { password = password })
 --  password :: String <- Halogen.gets _.password
     Halogen.liftEffect $ log ("new password: " <> password)
   
@@ -130,7 +134,8 @@ receive = const Nothing
 
 initialize :: Maybe Action
 initialize = Nothing
---initialize = Just GeneratePassword
+-- initialize = Just GeneratePassword
+
 
 finalize :: Maybe Action
 finalize = Nothing

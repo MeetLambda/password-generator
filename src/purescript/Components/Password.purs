@@ -36,8 +36,8 @@ initialState = identity
 
 component :: forall m. MonadAff m => Halogen.Component Surface Query Input Output m
 component = Halogen.mkComponent {
-    initialState,   -- :: Input -> State
-    render,         -- :: State -> Surface (ComponentSlot Surface Slots m Action) Action
+    initialState:  initialState,   -- :: Input -> State
+    render:        render,         -- :: State -> Surface (ComponentSlot Surface Slots m Action) Action
     eval: Halogen.mkEval $ Halogen.defaultEval {
         handleAction = handleAction,    --  handleAction    :: forall m. MonadAff m => Action → Halogen.HalogenM State Action Slots Output m Unit
         handleQuery  = handleQuery,     --  handleQuery     :: forall m a. Query a -> Halogen.HalogenM State Action Slots Output m (Maybe a)

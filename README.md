@@ -11,7 +11,7 @@ Compiling the [`purescript`](http://www.purescript.org) code, supposing [`nvm`](
     > npm install -g sass@1.26.3
     > npm install -g yarn@1.22.4
     > yarn clean; yarn build
-    > yarn docs; open generated-docs/html/index.html
+    > yarn docs
     > yarn develop-app
 
 

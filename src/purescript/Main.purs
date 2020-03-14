@@ -14,4 +14,4 @@ main = runHalogenAff do
     runUI Components.Main.component defaultInput body
 
 defaultInput :: Components.Main.Input
-defaultInput = { length: 8, characters: "abcdefghijklmnopqrstuvwxyz" }
+defaultInput = { length: 8 {- , characters: "abcdefghijklmnopqrstuvwxyz" -} }

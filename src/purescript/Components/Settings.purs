@@ -1,6 +1,7 @@
 module Components.Settings where
 
 import Components.UIChunks as UIChunks
+import Components.Validation (FieldError(..))
 import Components.Validation as Validation
 import Control.Applicative (pure, (<$>))
 import Control.Bind (bind, discard)
@@ -16,9 +17,10 @@ import Data.Function (($), (#), const)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (class Newtype)
-import Data.Ord ((<=), (>))
+import Data.Ord ((<=), (<), (>))
 import Data.Semigroup ((<>))
 import Data.Show (show)
+import Data.Symbol (SProxy(..))
 import Data.Unit (Unit, unit)
 import Data.Void (Void)
 import Effect.Aff (Aff, Milliseconds(..), delay)
@@ -27,6 +29,7 @@ import Effect.Class.Console (logShow)
 import Effect.Console (log)
 import Formless (FormFieldResult(..))
 import Formless as Formless
+import Formless.Query (injQuery)
 import Formless.Validation (Validation(..), hoistFnE_)
 import Halogen as Formless.Types.Component
 import Halogen as Halogen
@@ -48,9 +51,11 @@ data    Output      = UpdatedSettings Settings
 type    State       = Settings
 type    Slot        = Halogen.Slot Query Output
 
---  Slots :: (Type -> Type) -> Type -> Type -> Type
-type    Slots       = (
---    form :: Formless.Slot (Const Void) Unit
+-- type Slots :: (Type -> Type) -> Type -> Type -> Type
+type    Slots = (
+    --          Formless.Slot :: Slot (Query form query slots) msg
+    -- formless :: Formless.Slot (Query form query slots) msg
+--  formless :: Formless.Slot' 
 )
 
 data    CharacterSet = CapitalLetters | LowercaseLetters | Digits | Space | Symbols
@@ -62,44 +67,54 @@ type    Settings = {
 
 -- ###########################################################################################
 
-newtype Form r f = Form (r (FormData f))
-derive instance newtypeForm :: Newtype (Form r f) _
-
 type FormData f = (
     -- name    :: f Validation.FieldError   String  String,
     -- email   :: f Validation.FieldError   String  Validation.Email,
     length :: f Validation.FieldError String Int
 )
 
---  form
---            :: Formless.Component    Component HTML (Query form query slots) input msg m
-formComponent :: forall m. MonadAff m => Formless.Component Form (Const Void) () Unit State m
-formComponent = Formless.component (const formInput) $ Formless.defaultSpec { render = renderForm, handleEvent = Formless.raiseResult }
-    where
-    formInput = {
-        validators: Form {
-            -- name:    Validation.minLength 5,
-            -- email:   Validation.emailFormat >>> Validation.emailIsUsed,
-            length: Validation.strIsInt >>> Validation.enoughMoney
-        },
-        initialInputs: Nothing
-    }
+newtype Form r f = Form (r (FormData f))
+derive instance newtypeForm :: Newtype (Form r f) _
 
-    renderForm { form } = UIChunks.formContent_ [
-        UIChunks.input {
-            label: "Password Length",
-            help: Formless.getResult prx.length form # UIChunks.resultToHelp "How long do you want your password to be?",
-            placeholder: "32"
-        } [
-            HTML.Properties.value $ Formless.getInput prx.length form,
-            HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) prx.length
-        ],
-        UIChunks.buttonPrimary
-            [ HTML.Events.onClick \_ -> Just Formless.submit ]
-            [ HTML.text "Submit" ]
-    ]
-        where
-        prx = Formless.mkSProxies (Formless.FormProxy :: _ Form)
+-- formInput :: forall m. Monad m => Formless.Input' FormData m
+-- formInput = {
+--     initialInputs: Nothing,
+--     validators: Form {
+--         length: Formless.hoistFnE_ \str -> case Int.fromString str of
+--             Nothing -> Left InvalidInt
+--             Just n
+--                 | n < 0  -> Left TooShort
+--                 | n > 30 -> Left TooLong
+--                 | otherwise -> Right n
+--     }
+-- }
+
+--            :: Formless.Component    Component HTML (Query form query slots) input msg m
+-- formComponent :: forall m. MonadAff m => Formless.Component Form (Const Void) () Unit State m
+-- formComponent = Formless.defaultSpec {
+--         render = renderForm,
+--         handleEvent = Formless.raiseResult
+--     }
+--     where
+--     renderForm { form } = UIChunks.formContent_ [
+--         UIChunks.input {
+--             label: "Password Length",
+--             -- help: Formless.getResult _length form # UIChunks.resultToHelp "How long do you want your password to be?",
+--             -- help: Formless.getResult prx.length form # UIChunks.resultToHelp "How long do you want your password to be?",
+--             placeholder: "32"
+--         } [
+--             -- HTML.Properties.value $ Formless.getInput prx.length form,
+--             HTML.Properties.value $ Formless.getInput _length form,
+--             --HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) prx.length
+--             HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) _length
+--         ],
+--         UIChunks.buttonPrimary
+--             [ HTML.Events.onClick \_ -> Just Formless.submit ]
+--             [ HTML.text "Submit" ]
+--     ]
+--         where
+--         --prx = Formless.mkSProxies (Formless.FormProxy :: _ Form)
+--         _length = SProxy :: SProxy "length"
 
 -- ###########################################################################################
 
@@ -120,12 +135,11 @@ component = Halogen.mkComponent {
                     -- :: HalogenQ Query Action Input ~> HalogenM State Action Slots Output m
 }
 
---render :: forall m. MonadAff m => State -> Halogen.ComponentHTML Action Slots m
-render :: ∀ i p. HTML.HTML i p
+render :: forall m. MonadAff m => State -> Halogen.ComponentHTML Action Slots m
 render ({length:length}) = HTML.div [HTML.Properties.class_ (Halogen.ClassName "settings")] [
     HTML.h1  [] [HTML.text (show length)],
 --  HTML.input [HTML.Properties.name "length", HTML.Events.onChange updateLength, HTML.Events.onKeyDown updateLength, Halogen.HTML.Events.onKeyUp updateLength],
-    HTML.slot Formless._formless unit formComponent unit (Just <<< HandleForm),
+    -- HTML.slot Formless._formless unit formComponent unit (Just <<< HandleForm),
     HTML.button [HTML.Properties.title "new", HTML.Events.onClick \_ -> Just Click] [HTML.text "new"]
 ]
 

@@ -1,4 +1,4 @@
-module Components.UIChunks where
+module Components.Utils.UIChunks where
 
 import Control.Semigroupoid ((<<<))
 import Data.Either (Either(..), either)
@@ -7,10 +7,13 @@ import Data.Maybe (maybe)
 import Data.Semigroup ((<>))
 import DOM.HTML.Indexed (HTMLbutton, HTMLinput)
 import DOM.HTML.Indexed.InputType (InputType(..))
+
 import Halogen.HTML as HTML
 import Halogen.HTML.Properties as HTML.Properties
+
 import Formless (FormFieldResult(..))
-import Components.Validation as Validation
+
+import Components.Utils.Validation as Validation
 
 type Plain i p = Array (HTML.HTML i p) -> HTML.HTML i p
 class_ :: forall r t. String -> HTML.IProp ( "class" :: String | r ) t

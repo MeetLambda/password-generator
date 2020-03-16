@@ -1,4 +1,4 @@
-module Components.Validation where
+module Components.Utils.Validation where
 
 import Control.Applicative (pure)
 import Control.Bind (bind)

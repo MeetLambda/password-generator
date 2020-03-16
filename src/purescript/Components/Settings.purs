@@ -1,8 +1,5 @@
 module Components.Settings where
 
-import Components.UIChunks as UIChunks
-import Components.Validation (FieldError(..))
-import Components.Validation as Validation
 import Control.Applicative ((<$>))
 import Control.Bind (discard)
 import Control.Category (identity)
@@ -26,14 +23,19 @@ import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console (log)
 
-import Formless as Formless
-import Formless.Types.Component (Slot')
-
-import Halogen as Halogen
 import Halogen.Component (ComponentSlot)
 import Halogen.HTML as HTML
 import Halogen.HTML.Events as HTML.Events
 import Halogen.HTML.Properties as HTML.Properties
+
+import Formless as Formless
+import Formless.Types.Component (Slot')
+import Halogen as Halogen
+
+import Components.Utils.UIChunks as UIChunks
+import Components.Utils.Validation as Validation
+import Components.Utils.Validation (FieldError(..))
+
 
 type    Surface     = HTML.HTML
 data    Action      = HandleForm State
@@ -46,8 +48,6 @@ type    State       = Settings
 type    Slot        = Halogen.Slot Query Output
 
 type    ChildSlots  = ()
-type    MessyType_1 = (Const Void)
-type    MessyType_2 = Unit
 
 type Slots = (
     formless :: Slot' Form Settings Unit
@@ -85,10 +85,18 @@ formInput = {
     }
 }
 
-formComponent :: forall m. MonadAff m => Formless.Component Form MessyType_1 ChildSlots MessyType_2 State m
+type    FormQuery = (Const Void)
+type    FormInput = Unit
+
+formComponent :: forall m. MonadAff m => Formless.Component Form FormQuery ChildSlots FormInput State m
 formComponent = Formless.component (const formInput) $ Formless.defaultSpec {
-        handleEvent = Formless.raiseResult,
-        render      = renderForm
+        render          = renderForm,               --  const (HTML.text mempty)    :: PublicState form state   ->  ComponentHTML form action slots m
+    --  handleAction    = const (pure unit)         --                              :: action                   ->  HalogenM form state action slots msg m Unit
+    --  handleQuery     = const (pure Nothing)      --                              :: forall a. query a        ->  HalogenM form state action slots msg m (Maybe a)
+        handleEvent     = Formless.raiseResult      --  const(pure unit)            :: Event form st            ->  HalogenM form state action slots msg m Unit
+    --  receive         = const Nothing,            --                              :: input                    ->  Maybe action
+    --  initialize      = Nothing,                  --                              ::                              Maybe action
+    --  finalize        = Nothing                   --                              ::                              Maybe action
     }
     where
         renderForm { form } = UIChunks.formContent_ [
@@ -107,28 +115,30 @@ formComponent = Formless.component (const formInput) $ Formless.defaultSpec {
             where
             formData = Formless.mkSProxies (Formless.FormProxy :: _ Form)
 
--- formComponent' :: forall m. MonadAff m => Formless.Component Form MessyType_1 ChildSlots MessyType_2 State m
+-- formComponent' :: forall m. MonadAff m => Formless.Component Form FormQuery ChildSlots FormInput State m
 -- formComponent' = Formless.component (const formInput) $ Formless.defaultSpec {
 --     handleEvent = Formless.raiseResult,
 --     render      = formRender'
 -- }
 
--- formRender' form = UIChunks.formContent_ [
---     UIChunks.input {
---         label: "Password Length",
---         help: Formless.getResult formData.length form # UIChunks.resultToHelp "How long do you want your password to be?",
---         placeholder: "32"
---     } [
---         HTML.Properties.value $ Formless.getInput formData.length form,
---         HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) formData.length
---     ],
+-- formRender' { form } = 
+--     let
+--         formData = Formless.mkSProxies (Formless.FormProxy :: _ Form)
+--     in
+--         UIChunks.formContent_ [
+--             UIChunks.input {
+--                 label: "Password Length",
+--                 help: Formless.getResult formData.length form # UIChunks.resultToHelp "How long do you want your password to be?",
+--                 placeholder: "32"
+--             } [
+--                 HTML.Properties.value $ Formless.getInput formData.length form,
+--                 HTML.Events.onValueInput $ Just <<< Formless.asyncSetValidate (Milliseconds 500.0) formData.length
+--             ],
 
---     UIChunks.buttonPrimary
---         [ HTML.Events.onClick \_ -> Just Formless.submit ]
---         [ HTML.text "Submit" ]
--- ]
---     where
---     formData = Formless.mkSProxies (Formless.FormProxy :: _ Form)
+--             UIChunks.buttonPrimary
+--                 [ HTML.Events.onClick \_ -> Just Formless.submit ]
+--                 [ HTML.text "Submit" ]
+--         ]
 
 -- ###########################################################################################
 

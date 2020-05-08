@@ -46,8 +46,8 @@ instance showFieldError :: Show FieldError where
 
 instance toTextFieldError :: ToText FieldError where
     toText (InvalidInt str) = "Could not parse \"" <> str <> "\" to a valid integer."
-    toText (TooShort n) = "You must enter at least " <> show n <> " characters."
-    toText (TooLong n) = "You must enter less than " <> show n <> " characters."
+    toText (TooShort n) = "You must enter at least 8 characters instead of " <> show n
+    toText (TooLong n) = "You must enter less than 30 instead of " <> show n
     -- toText InvalidEmail = "That email is not valid."
     -- toText EmailInUse = "That email is already being used."
     -- toText (NotEqual str0 str1) = "This field contains \"" <> str1 <> "\" but must be equal to \"" <> str0 <> "\" to validate."

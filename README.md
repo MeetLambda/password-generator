@@ -6,9 +6,9 @@ Compiling the [`purescript`](http://www.purescript.org) code, supposing [`nvm`](
 
     > nvm install --lts (12.16.1)
     > npm install -g purescript@0.13.6
-    > npm install -g spago@0.14.0
+    > npm install -g spago@0.15.2
     > npm install -g parcel-bundler@1.12.4
-    > npm install -g sass@1.26.3
+    > npm install -g sass@1.26.5
     > npm install -g yarn@1.22.4
     > yarn clean; yarn build
     > yarn docs

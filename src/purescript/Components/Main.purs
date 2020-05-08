@@ -2,6 +2,8 @@ module Components.Main where
 
 import Components.Password as Components.Password
 import Components.Settings as Components.Settings
+import Types.Settings as Types.Settings
+
 import Control.Applicative (pure)
 import Control.Bind (bind, discard, class Bind)
 --import Control.Category (identity)
@@ -35,7 +37,7 @@ import Halogen.HTML.Properties as HTML.Properties
 - `m` is the effect monad used during evaluation                                             :: Type -> Type
 -}
 
-type    Settings    = Components.Settings.Settings
+type    Settings    = Types.Settings.Settings
 
 type    Surface     = HTML.HTML
 

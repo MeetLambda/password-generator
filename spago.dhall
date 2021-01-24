@@ -12,6 +12,7 @@
         -- "stringutils",
         -- "polyform",
         -- "psci-support",
+        "payload",
         "test-unit"
     ],
     packages = ./packages.dhall

@@ -13,11 +13,13 @@
         "yarn": "^1.17.3"
     },
     "devDependencies": {
-        "sass": "^1.26.5"
+        "sass": "^1.32.5"
     },
     "dependencies": {
         "purescript": "^0.13.6",
-        "purty": "^6.2.0",
+        "purty": "^6.3.0",
+        "react": "^17.0.1",
+        "react-dom": "^17.0.1",
         "spago": "^0.15.2"
     }
 }

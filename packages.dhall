@@ -1,11 +1,7 @@
-let mkPackage =
-      https://github.com/purescript/package-sets/releases/download/psc-0.13.6-20200507/packages.dhall sha256:9c1e8951e721b79de1de551f31ecb5a339e82bbd43300eb5ccfb1bf8cf7bbd62
-
 let upstream =
-      https://github.com/purescript/package-sets/releases/download/psc-0.13.6-20200507/packages.dhall sha256:9c1e8951e721b79de1de551f31ecb5a339e82bbd43300eb5ccfb1bf8cf7bbd62
+      https://github.com/purescript/package-sets/releases/download/psc-0.13.8-20210114/packages.dhall sha256:6c7e247826373fc2b63fbf0a28fa84d8ff4981fbac0aa087985413716cb4b286
 
-let overrides = {=}
-
-let additions = {=}
-
-in  upstream // overrides // additions
+in  upstream
+    with concur-core    = ../../ecosystem/purescript-concur-core/spago.dhall    as Location
+    with concur-react   = ../../ecosystem/purescript-concur-react/spago.dhall   as Location
+    with fortuna        = ../purescript-fortuna/spago.dhall                     as Location

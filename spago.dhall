@@ -1,6 +1,18 @@
 {
-    sources = [ "src/**/*.purs", "test/**/*.purs" ],
     name = "password-generator",
-    dependencies =  [ "console", "effect", "halogen", "halogen-formless", "random", "stringutils", "polyform", "psci-support" ],
+    sources = [ "src/**/*.purs", "test/**/*.purs" ],
+    dependencies =  [
+        "concur-react",
+        "console",
+        "effect",
+        "fortuna",
+        -- "halogen",
+        -- "halogen-formless",
+        -- "random",
+        -- "stringutils",
+        -- "polyform",
+        -- "psci-support",
+        "test-unit"
+    ],
     packages = ./packages.dhall
 }

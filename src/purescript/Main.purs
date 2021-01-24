@@ -8,10 +8,16 @@ import Halogen.Aff.Util (runHalogenAff, awaitBody)
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.HTMLElement (HTMLElement)
 
-main :: Effect Unit
-main = runHalogenAff do
-    body::HTMLElement <- awaitBody
-    runUI Components.Main.component defaultInput body
+-- main :: Effect Unit
+-- main = runHalogenAff do
+--     body::HTMLElement <- awaitBody
+--     runUI Components.Main.component defaultInput body
 
-defaultInput :: Components.Main.Input
-defaultInput = { length: 8 {- , characters: "abcdefghijklmnopqrstuvwxyz" -} }
+-- defaultInput :: Components.Main.Input
+-- defaultInput = { length: 8 {- , characters: "abcdefghijklmnopqrstuvwxyz" -} }
+
+
+main :: Effect Unit
+main = do
+    grid <- addTile =<< addTile emptyGrid
+    runWidgetInDom "app" (Purs2048Widget.widget grid)

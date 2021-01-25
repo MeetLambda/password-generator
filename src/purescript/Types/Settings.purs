@@ -5,6 +5,7 @@ import Control.Semigroupoid ((<<<))
 import Data.Foldable (foldr)
 import Data.Function (($))
 import Data.Set (Set, fromFoldable, toUnfoldable, union, empty)
+import Data.Show (class Show)
 import Data.String.CodeUnits (toCharArray, fromCharArray)
 import Payload.Internal.Utils (toLowerCase)
 
@@ -12,7 +13,10 @@ import Effect (Effect)
 import Protobuf.Common (Bytes)
 
 data    Password = Password String
--- type    Password = String
+-- derive instance showPassword :: Show Password
+instance showPassword :: Show Password where
+  show (Password password) = password
+
 type    CharSet = Set Char
 
 stringToSet :: String -> CharSet

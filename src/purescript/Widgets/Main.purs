@@ -12,7 +12,7 @@ import Widgets.PasswordGenerator as Widgets.PasswordGenerator
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 
-defaultSettings = Settings { length:8, characterSets:singleton uppercaseLettersSet, characters:"luigi" } :: Settings
+defaultSettings = Settings { length:24, characterSets:singleton uppercaseLettersSet, characters:"luigi" } :: Settings
 
 widget :: forall a. Widget HTML a
 -- widget = h4 [] [text "Password Generator"]

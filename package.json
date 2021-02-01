@@ -5,6 +5,7 @@
         "rebuild": "clear; yarn clean; yarn build",
         "develop-purs": "spago --jobs 10 build --watch --clear-screen --purs-args '--codegen js,sourcemaps --verbose-errors'",
         "develop-app": "parcel --host 0.0.0.0 --out-dir ./output ./src/html/index.html",
+        "go": "parcel --host 0.0.0.0 --out-dir ./output ./src/html/index.html",
         "verify": "yarn clean && spago verify-set",
         "docs": "spago docs --open",
         "clean": "while read gitIgnorePattern; do rm -rf .${gitIgnorePattern}; done < .gitignore"

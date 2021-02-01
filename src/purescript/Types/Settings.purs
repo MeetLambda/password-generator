@@ -4,12 +4,12 @@ import Control.Applicative (pure)
 import Control.Semigroupoid ((<<<))
 import Data.Foldable (foldr)
 import Data.Function (($))
+-- import Data.Newtype (class Newtype)
 import Data.Set (Set, fromFoldable, toUnfoldable, union, empty)
 import Data.Show (class Show)
 import Data.String.CodeUnits (toCharArray, fromCharArray)
-import Payload.Internal.Utils (toLowerCase)
-
 import Effect (Effect)
+import Payload.Internal.Utils (toLowerCase)
 import Protobuf.Common (Bytes)
 
 data    Password = Password String
@@ -17,7 +17,7 @@ data    Password = Password String
 instance showPassword :: Show Password where
   show (Password password) = password
 
-type    CharSet = Set Char
+type  CharSet = Set Char
 
 stringToSet :: String -> CharSet
 stringToSet = fromFoldable <<< toCharArray
@@ -34,14 +34,14 @@ uppercaseLettersSet = stringToSet uppercaseLetters                  :: CharSet
 lowercaseLettersSet = stringToSet $ toLowerCase uppercaseLetters    :: CharSet
 numbersSet          = stringToSet "0123456789"                      :: CharSet
 spacesSet           = stringToSet " "                               :: CharSet
-weirdcharsSet       = stringToSet "!#$%"                            :: CharSet
+weirdcharsSet       = stringToSet "!#$%…"                           :: CharSet
 
-data Settings = Settings {
+type Settings = {
     length :: Int,
     characterSets :: Set CharSet,
     characters :: String
 }
-
+-- derive instance newtypeSettings :: Newtype Settings _
 
 -- =========================================================
 

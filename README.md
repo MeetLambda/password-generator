@@ -30,3 +30,16 @@ The first command will invoke `spago` to continuosly compile the PureScript file
     >> starting...
     Server running at http://localhost:1234 
     ✨  Built in 2.36s.
+
+
+## Local packaged used
+
+Being a work in progress (WIP), this project uses a few local dependencies, both to be able to access still unreleased versions of public libraries (eg Concur) and still completely unpublished (and far from finished) libraries (eg Forturna).
+
+These are the commands to retrieve these libraries:
+
+    > git clone https://github.com/clipperz/purescript-fortuna.git ../purescript-fortuna
+    > git clone https://github.com/purescript-concur/purescript-concur-core.git ../purescript-concur-core
+    > git clone	https://github.com/purescript-concur/purescript-concur-react.git ../purescript-concur-react
+    > git clone https://github.com/ajnsit/purescript-formless-independent.git ../purescript-formless-independent
+

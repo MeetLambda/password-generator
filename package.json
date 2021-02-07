@@ -17,6 +17,7 @@
         "sass": "^1.32.5"
     },
     "dependencies": {
+        "parcel": "^1.12.4",
         "purescript": "^0.13.6",
         "purty": "^6.3.0",
         "react": "^17.0.1",

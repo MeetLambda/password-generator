@@ -24,14 +24,18 @@ import Data.Set (member)
 import Data.Show (show)
 import Data.String.Common (null)
 import Effect.Aff.Class (liftAff)
+import Effect.Class (liftEffect)
+import Effect.Console as Effect.Console
 import Effect.Fortuna (randomBytes)
+import Formless as Formaless
 import Formless.Transform.Record (wrapInputFields)
 import Formless.Types.Form (InputField(..), OutputField)
-import Formless.Types.Query (State)
-import Formless.Validation (Validation, hoistFn_, hoistFnE_)
+import Formless.Types.Query (State, initFormState)
+import Formless.Validation (Validation, hoistFn_, hoistFnE_, toText)
 import React.DOM.Dynamic (s)
 import React.SyntheticEvent (SyntheticEvent_)
-import Types.Settings (Password(..), Settings(..), suggestPassword, uppercaseLettersSet, lowercaseLettersSet, numbersSet, spacesSet, weirdcharsSet)
+import Types.Settings (Password(..), Settings(..), characterSetsToString, suggestPassword, uppercaseLettersSet, lowercaseLettersSet, numbersSet, spacesSet, weirdcharsSet)
+import Unsafe.Coerce (unsafeCoerce)
 
 -- type  CharSet = Set Char
 
@@ -50,13 +54,13 @@ import Types.Settings (Password(..), Settings(..), suggestPassword, uppercaseLet
 --  https://github.com/ajnsit/purescript-formless-independent
 newtype SettingsForm r f = SettingsForm (r (
     --                       err   in       out
-    length              :: f Error Int      Int,
-    uppercaseLetters    :: f Error Boolean  Boolean,
-    numbers             :: f Error Boolean  Boolean,
-    lowercaseLetters    :: f Error Boolean  Boolean,
-    spaces              :: f Error Boolean  Boolean,
-    weirdchars          :: f Error Boolean  Boolean,
-    characters          :: f Error String   String
+    length              :: f Error String   Int,
+    uppercaseLetters    :: f Error Boolean  Boolean --,
+    -- numbers             :: f Error Boolean  Boolean,
+    -- lowercaseLetters    :: f Error Boolean  Boolean,
+    -- spaces              :: f Error Boolean  Boolean,
+    -- weirdchars          :: f Error Boolean  Boolean,
+    -- characters          :: f Error String   String
 ))
 derive instance newtypeSettingsForm :: Newtype (SettingsForm r f) _
 
@@ -67,24 +71,24 @@ type SettingsFormState  = State SettingsForm (Widget HTML)
 
 inputs :: Settings -> SettingsInputForm
 inputs settings = SettingsForm {
-    length:             InputField settings.length,
-    uppercaseLetters:   InputField (member uppercaseLettersSet  settings.characterSets),
-    numbers:            InputField (member lowercaseLettersSet  settings.characterSets),
-    lowercaseLetters:   InputField (member numbersSet           settings.characterSets),
-    spaces:             InputField (member spacesSet            settings.characterSets),
-    weirdchars:         InputField (member weirdcharsSet        settings.characterSets),
-    characters:         InputField settings.characters
+    length:             InputField $ show settings.length,
+    uppercaseLetters:   InputField (member uppercaseLettersSet  settings.characterSets) --,
+    -- numbers:            InputField (member lowercaseLettersSet  settings.characterSets),
+    -- lowercaseLetters:   InputField (member numbersSet           settings.characterSets),
+    -- spaces:             InputField (member spacesSet            settings.characterSets),
+    -- weirdchars:         InputField (member weirdcharsSet        settings.characterSets),
+    -- characters:         InputField settings.characters
 }
 
 inputs' :: Settings -> SettingsInputForm
 inputs' settings = wrapInputFields {
-    length:             settings.length,
-    uppercaseLetters:   (member uppercaseLettersSet  settings.characterSets),
-    numbers:            (member lowercaseLettersSet  settings.characterSets),
-    lowercaseLetters:   (member numbersSet           settings.characterSets),
-    spaces:             (member spacesSet            settings.characterSets),
-    weirdchars:         (member weirdcharsSet        settings.characterSets),
-    characters:         settings.characters
+    length:             show settings.length,
+    uppercaseLetters:   (member uppercaseLettersSet  settings.characterSets) --,
+    -- numbers:            (member lowercaseLettersSet  settings.characterSets),
+    -- lowercaseLetters:   (member numbersSet           settings.characterSets),
+    -- spaces:             (member spacesSet            settings.characterSets),
+    -- weirdchars:         (member weirdcharsSet        settings.characterSets),
+    -- characters:         settings.characters
 }
 
 data Error
@@ -112,20 +116,181 @@ inRange l t = hoistFnE_ $ \x ->
 booleanNoop :: ∀ form m. Monad m => Validation form m Error Boolean Boolean
 booleanNoop = hoistFnE_ $ \v -> Right v
 
+stringToInt :: ∀ form m. Monad m => Validation form m Error String Int
+stringToInt = hoistFnE_ $ fromString >>> (note NotNumber)
+
+
 validators :: SettingsValidators
 validators = SettingsForm {
     -- name: isNonEmpty,
     -- email1: isNonEmpty >>> validEmail >>> emailNotUsed,
     -- email2: isNonEmpty >>> equalsEmail1 >>> emailNotUsed,
 
-    length:             isNonEmpty >>> fromString >>> (note NotNumber) >>> (inRange 1 99),
-    uppercaseLetters:   booleanNoop,
-    numbers:            booleanNoop,
-    lowercaseLetters:   booleanNoop,
-    spaces:             booleanNoop,
-    weirdchars:         booleanNoop,
-    characters:         isNonEmpty
+    -- length:             isNonEmpty >>> fromString >>> (note NotNumber) >>> (inRange 1 99),
+    length:             isNonEmpty >>> stringToInt >>> (inRange 1 99),
+    uppercaseLetters:   booleanNoop --,
+    -- numbers:            booleanNoop,
+    -- lowercaseLetters:   booleanNoop,
+    -- spaces:             booleanNoop,
+    -- weirdchars:         booleanNoop,
+    -- characters:         isNonEmpty
 }
+
+-- data Data = S Settings | P Password
+
+--  https://thomashoneyman.com/articles/practical-profunctor-lenses-optics/
+--  https://github.com/ajnsit/purescript-formless-independent
+
+settingsSetLength' :: Settings -> Int -> Settings
+settingsSetLength' settings n =  settings { length = n }
+
+-- lens' :: forall b a t s. (s -> Tuple a (b -> t)) -> Lens s t a b
+-- lengthLens :: Lens' (Settings -> Int) (Settings -> Int -> Settings)
+-- lengthLens :: Lens' Settings Int
+-- lengthLens = lens (\(Settings values) -> values.length) (\(Settings values) n -> Settings (values { length = n }))
+
+-- settingsWithInt :: Settings -> Int -> Settings
+-- settingsWithInt s i = s
+
+setter :: forall r a. Settings -> (String -> Maybe a) -> (Settings -> a -> Settings) -> SyntheticEvent_ r -> Settings
+-- setter settings converter setter = ((fromMaybe settings) <<< (map (setter settings)) <<< converter <<< Props.unsafeTargetValue)
+setter v c s = ((fromMaybe v) <<< (map (s v)) <<< c <<< Props.unsafeTargetValue)
+
+{-
+    form <=> record = [field]
+
+    field Value => lens record
+        Value -> Maybe Error -> Widget HTML Value
+        validation rule => SyntheticEvent_ r -> Either Error Value
+-}
+
+unsafeTargetChecked ::
+  forall r.
+  SyntheticEvent_ r ->
+  Boolean
+unsafeTargetChecked e = (unsafeCoerce e).target.checked
+
+log :: forall r. Settings -> SyntheticEvent_ r -> Settings
+log settings event = settings { characters = Props.unsafeTargetValue event }
+
+check :: forall r. Settings -> SyntheticEvent_ r -> Settings
+check settings event = settings { characters = show $ unsafeTargetChecked event }
+
+
+renderSettingsFormWidget :: SettingsFormState -> Widget HTML (Query SettingsForm)
+renderSettingsFormWidget fstate =
+    div [] [
+        input [
+            Props.value $ Formless.getInput _length fstate.form,
+            (Formless.set _length <<< Props.unsafeTargetValue) <$> Props.onChange
+        ],
+        errorDisplay $ Formless.getError _length fstate.form,
+
+        input [
+            Props._type "checkbox",
+            Props.value $ Formless.getInput _uppercaseLetters fstate.form,
+            (Formless.set _uppercaseLetters <<< unsafeTargetChecked) <$> Props.onChange
+        ],
+        errorDisplay $ Formless.getError _uppercaseLetters fstate.form
+
+        -- D.input [
+        --     P.value $ F.getInput _email1 fstate.form,
+        --     -- This will help us avoid hitting the server on every single key press.
+        --     (F.asyncSetValidate debounceTime _email1 <<< P.unsafeTargetValue) <$> P.onChange
+        -- ],
+        -- errorDisplay $ F.getError _email1 fstate.form,
+
+        -- D.input [
+        --     P.value $ F.getInput _email2 fstate.form,
+        --     (F.asyncSetValidate debounceTime _email2 <<< P.unsafeTargetValue) <$> P.onChange
+        -- ],
+        -- errorDisplay $ F.getError _email2 fstate.form
+    ]
+    where
+        _length = SProxy :: SProxy "length"
+        _uppercaseLetters = SProxy :: SProxy "uppercaseLetters"
+        -- _email2 = SProxy :: SProxy "email2"
+        -- debounceTime = Milliseconds 300.0
+        errorDisplay = maybe mempty (\err -> div [Props.style {color: "red"}] [text $ toText err])
+
+
+
+settingsWidget :: Settings -> Widget HTML Settings
+-- settingsWidget settings = button [Props.onClick]    [text "Settings"]    $> (settings)
+settingsWidget settings = div [Props.className "passwordSettings"] [
+    form [] [
+        label [] [
+            text "length",
+            -- input [((fromMaybe settings) <<< (map (settingsSetLength' settings)) <<< fromString <<< Props.unsafeTargetValue) <$> Props.onChange, Props.className "length", Props._type "number", Props.min "1", Props.max "99", Props.value (show settingsValue.length)]
+            -- input [(setter settings fromString settingsSetLength') <$> Props.onChange, Props.className "length", Props._type "number", Props.min "1", Props.max "99", Props.value (show settingsValue.length)]
+            input [log settings <$> Props.onChange, Props.className "length", Props._type "number", Props.min "1", Props.max "99", Props.value (show settings.length)]
+
+            {-
+                data Action = Changed String | Focused
+
+                inputWidget :: Widget HTML Action
+                inputWidget = input [(Changed <<< unsafeTargetValue) <$> onChange, Focused <$ onFocus]
+
+            -}
+        ],
+        fieldset [] [
+            legend [] [text "characters"],
+            label [] [
+                -- input [log settings <$> Props.onChange, log settings <$> Props.checked, Props._type "checkbox"],
+                input [check settings <$> Props.onChange, Props._type "checkbox"],
+                text "A-Z"
+            ],
+            label [] [
+                input [Props._type "checkbox"],
+                text "a-z"
+            ],
+            label [] [
+                input [Props._type "checkbox"],
+                text "0-9"
+            ],
+            label [] [
+                input [Props._type "checkbox"],
+                text "space"
+            ],
+            label [] [
+                input [Props._type "checkbox"],
+                text "!#?"
+            ],
+            input [log settings <$> Props.onChange, Props._type "text", Props.value settings.characters]
+        ]
+    ]
+]
+
+
+
+logSettings :: Settings -> String
+logSettings s = "settings: " <> (show s.length) <> " characterSet: " <> (characterSetsToString s.characterSets) <> " => " <> s.characters
+
+
+suggestionWidget :: Settings -> Widget HTML Password
+suggestionWidget settings = do
+    -- bytes <- liftAff $ randomBytes settingsRecord.length
+    -- button [Props.onClick]    [text "Suggestion"]    $> (suggestPassword settings bytes)
+    button [Props.onClick]  [text "Suggestion"] $> (Password (show settings.length))
+
+widget :: Settings -> Widget HTML Password
+-- widget settings@(Settings settingsRecord) =
+--     button [Props.onClick] [text ("Password Generator " <> (show settingsRecord.length))] $> (Password "ciao ciao")
+widget settings = go (initFormState (inputs settings) validators)
+    where
+        go :: SettingsFormState -> Widget HTML Password
+        go formState = do
+            -- value :: Either Settings Password <- (map Left (settingsWidget settings)) <|> (map Right (suggestionWidget settings))
+            value :: Either (Query SettingsForm) Password <- (map Left (renderSettingsFormWidget formState)) <|> (map Right (suggestionWidget settings))
+            -- value :: Data <- P (settingsWidget settings) <|> P (suggestionWidget settings)
+            case value of
+                Left settings' -> do
+                    liftEffect (Effect.Console.log $ logSettings settings')
+                    -- widget settings'
+                    go formState -- TODO
+                Right password -> pure password
+
+
 
 
 
@@ -187,105 +352,3 @@ equalsEmail1 = hoistFnE $ \form str ->
 
 
 -}
-
-
-
-
-
-
-
--- data Data = S Settings | P Password
-
---  https://thomashoneyman.com/articles/practical-profunctor-lenses-optics/
---  https://github.com/ajnsit/purescript-formless-independent
-
-settingsSetLength' :: Settings -> Int -> Settings
-settingsSetLength' settings n =  settings { length = n }
-
--- lens' :: forall b a t s. (s -> Tuple a (b -> t)) -> Lens s t a b
--- lengthLens :: Lens' (Settings -> Int) (Settings -> Int -> Settings)
--- lengthLens :: Lens' Settings Int
--- lengthLens = lens (\(Settings values) -> values.length) (\(Settings values) n -> Settings (values { length = n }))
-
--- settingsWithInt :: Settings -> Int -> Settings
--- settingsWithInt s i = s
-
-setter :: forall r a. Settings -> (String -> Maybe a) -> (Settings -> a -> Settings) -> SyntheticEvent_ r -> Settings
--- setter settings converter setter = ((fromMaybe settings) <<< (map (setter settings)) <<< converter <<< Props.unsafeTargetValue)
-setter v c s = ((fromMaybe v) <<< (map (s v)) <<< c <<< Props.unsafeTargetValue)
-
-{-
-    form <=> record = [field]
-
-    field Value => lens record
-        Value -> Maybe Error -> Widget HTML Value
-        validation rule => SyntheticEvent_ r -> Either Error Value
--}
-
-log :: forall r. Settings -> SyntheticEvent_ r -> Settings
-log settings event = settings { characters = Props.unsafeTargetValue event }
-
-settingsWidget :: Settings -> Widget HTML Settings
--- settingsWidget settings = button [Props.onClick]    [text "Settings"]    $> (settings)
-settingsWidget settings = div [Props.className "passwordSettings"] [
-    form [] [
-        label [] [
-            text "length",
-            -- input [((fromMaybe settings) <<< (map (settingsSetLength' settings)) <<< fromString <<< Props.unsafeTargetValue) <$> Props.onChange, Props.className "length", Props._type "number", Props.min "1", Props.max "99", Props.value (show settingsValue.length)]
-            -- input [(setter settings fromString settingsSetLength') <$> Props.onChange, Props.className "length", Props._type "number", Props.min "1", Props.max "99", Props.value (show settingsValue.length)]
-            input [log settings <$> Props.onChange, Props.className "length", Props._type "number", Props.min "1", Props.max "99", Props.value (show settings.length)]
-
-            {-
-                data Action = Changed String | Focused
-
-                inputWidget :: Widget HTML Action
-                inputWidget = input [(Changed <<< unsafeTargetValue) <$> onChange, Focused <$ onFocus]
-
-            -}
-        ],
-        fieldset [] [
-            legend [] [text "characters"],
-            label [] [
-                input [log settings <$> Props.onChange, Props._type "checkbox"],
-                text "A-Z"
-            ],
-            label [] [
-                input [Props._type "checkbox"],
-                text "a-z"
-            ],
-            label [] [
-                input [Props._type "checkbox"],
-                text "0-9"
-            ],
-            label [] [
-                input [Props._type "checkbox"],
-                text "space"
-            ],
-            label [] [
-                input [Props._type "checkbox"],
-                text "!#?"
-            ],
-            input [log settings <$> Props.onChange, Props._type "text", Props.value settings.characters]
-        ]
-        
-    ]
-]
-
-
-
-
-suggestionWidget :: Settings -> Widget HTML Password
-suggestionWidget settings = do
-    -- bytes <- liftAff $ randomBytes settingsRecord.length
-    -- button [Props.onClick]    [text "Suggestion"]    $> (suggestPassword settings bytes)
-    button [Props.onClick]  [text "Suggestion"] $> (Password (show settings.length))
-
-widget :: Settings -> Widget HTML Password
--- widget settings@(Settings settingsRecord) =
---     button [Props.onClick] [text ("Password Generator " <> (show settingsRecord.length))] $> (Password "ciao ciao")
-widget settings = do
-    value :: Either Settings Password <- (map Left (settingsWidget settings)) <|> (map Right (suggestionWidget settings))
-    -- value :: Data <- P (settingsWidget settings) <|> P (suggestionWidget settings)
-    case value of
-        Left settings' -> widget settings'
-        Right password -> pure password

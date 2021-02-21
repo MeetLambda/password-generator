@@ -14,7 +14,7 @@
         "yarn": "^1.17.3"
     },
     "devDependencies": {
-        "sass": "^1.32.5"
+        "sass": "^1.32.6"
     },
     "dependencies": {
         "parcel": "^1.12.4",

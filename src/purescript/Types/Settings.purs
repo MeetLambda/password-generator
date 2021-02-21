@@ -36,12 +36,22 @@ numbersSet          = stringToSet "0123456789"                      :: CharSet
 spacesSet           = stringToSet " "                               :: CharSet
 weirdcharsSet       = stringToSet "!#$%…"                           :: CharSet
 
-type Settings = {
-    length :: Int,
-    characterSets :: Set CharSet,
-    characters :: String
-}
+-- type Settings = {
+--     length :: Int,
+--     characterSets :: Set CharSet,
+--     characters :: String
+-- }
 -- derive instance newtypeSettings :: Newtype Settings _
+
+type Settings = {
+    length              :: Int,
+    uppercaseLetters    :: Boolean,
+    numbers             :: Boolean,
+    lowercaseLetters    :: Boolean,
+    spaces              :: Boolean,
+    weirdchars          :: Boolean,
+    characters          :: String
+}
 
 -- =========================================================
 

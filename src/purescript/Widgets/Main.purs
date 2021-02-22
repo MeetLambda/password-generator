@@ -15,12 +15,13 @@ import Effect.Console (log)
 -- defaultSettings = { length:24, characterSets:singleton uppercaseLettersSet, characters:"luigi" } :: Settings
 defaultSettings = {
     length              : 24,
-    uppercaseLetters    : true,
-    numbers             : true,
-    lowercaseLetters    : true,
-    spaces              : false,
-    weirdchars          : false,
-    -- characters          : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789;:.!@#$%^&*()"
+    options: {
+        uppercaseLetters    : true,
+        numbers             : true,
+        lowercaseLetters    : true,
+        spaces              : false,
+        weirdchars          : false
+    },
     characters          : "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 } :: Settings
 

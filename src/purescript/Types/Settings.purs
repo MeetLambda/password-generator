@@ -4,7 +4,7 @@ import Control.Applicative (pure)
 import Control.Semigroupoid ((<<<))
 import Data.Foldable (foldr)
 import Data.Function (($))
--- import Data.Newtype (class Newtype)
+import Data.Options (options)
 import Data.Set (Set, fromFoldable, toUnfoldable, union, empty)
 import Data.Show (class Show)
 import Data.String.CodeUnits (toCharArray, fromCharArray)
@@ -17,24 +17,24 @@ data    Password = Password String
 instance showPassword :: Show Password where
   show (Password password) = password
 
-type  CharSet = Set Char
+-- type  CharSet = Set Char
 
-stringToSet :: String -> CharSet
+stringToSet :: String -> (Set Char)
 stringToSet = fromFoldable <<< toCharArray
 
-setToChars :: CharSet -> String
+setToChars :: (Set Char) -> String
 setToChars s = fromCharArray $ toUnfoldable s
 
-characterSetsToString :: (Set CharSet) -> String
+characterSetsToString :: (Set (Set Char)) -> String
 characterSetsToString xs = fromCharArray $ toUnfoldable (foldr union empty xs)
 
 uppercaseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" :: String
 
-uppercaseLettersSet = stringToSet uppercaseLetters                  :: CharSet
-lowercaseLettersSet = stringToSet $ toLowerCase uppercaseLetters    :: CharSet
-numbersSet          = stringToSet "0123456789"                      :: CharSet
-spacesSet           = stringToSet " "                               :: CharSet
-weirdcharsSet       = stringToSet "!#$%…"                           :: CharSet
+uppercaseLettersSet = stringToSet uppercaseLetters                  :: Set Char
+lowercaseLettersSet = stringToSet $ toLowerCase uppercaseLetters    :: Set Char
+numbersSet          = stringToSet "0123456789"                      :: Set Char
+spacesSet           = stringToSet " "                               :: Set Char
+weirdcharsSet       = stringToSet "!#$%…"                           :: Set Char
 
 -- type Settings = {
 --     length :: Int,
@@ -43,17 +43,31 @@ weirdcharsSet       = stringToSet "!#$%…"                           :: CharSet
 -- }
 -- derive instance newtypeSettings :: Newtype Settings _
 
-type Settings = {
-    length              :: Int,
+type Options = {
     uppercaseLetters    :: Boolean,
-    numbers             :: Boolean,
     lowercaseLetters    :: Boolean,
+    numbers             :: Boolean,
     spaces              :: Boolean,
-    weirdchars          :: Boolean,
-    characters          :: String
+    weirdchars          :: Boolean
 }
+
+charactersWithOptions :: Options -> (Set Char)
+charactersWithOptions options = foldr union empty [
+    (if options.uppercaseLetters    then uppercaseLettersSet    else empty),
+    (if options.lowercaseLetters    then lowercaseLettersSet    else empty),
+    (if options.numbers             then numbersSet             else empty),
+    (if options.spaces              then spacesSet              else empty),
+    (if options.weirdchars          then weirdcharsSet          else empty)
+]
+
+type Settings = {
+    length      :: Int,
+    options     ::  Options,
+    characters  :: String
+}
+
 
 -- =========================================================
 
-suggestPassword :: Settings -> Bytes -> Password
-suggestPassword settings bytes = Password "pippo"
+suggestPassword :: Settings -> (Int -> Effect Bytes) -> Password
+suggestPassword settings prng = Password "pippo"

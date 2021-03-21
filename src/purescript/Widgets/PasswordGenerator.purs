@@ -20,25 +20,29 @@ import Data.Lens.Lens (Lens'(..), lens)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Monoid (mempty)
 import Data.Newtype (class Newtype)
-import Data.Ord ((<), (>))
-import Data.Semigroup ((<>))
+import Data.Ord ((<=), (<), (>), (>=))
+import Data.Ring ((-))
+import Data.Semigroup (append, (<>))
+import Data.Semiring ((+))
 import Data.Set (member)
-import Data.Show (show)
-import Data.String.CodeUnits (length)
+import Data.Show (show, class Show)
+import Data.String.CodePoints (length, take, drop)
 import Data.String.Common (null)
 import Data.Symbol (SProxy(..))
+import Data.Void (Void)
+import Effect (Effect)
+import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console as Effect.Console
+import Bytes (Bytes, foldMapBytesToString)
 import Effect.Fortuna (randomBytes)
-import Effect.Fortuna as PRNG
+-- import Effect.Fortuna as PRNG
 import Formless as Formless
-import React.DOM.Dynamic (s)
+import React.DOM.Dynamic (p, s)
 import React.SyntheticEvent (SyntheticEvent_)
-import Types.Settings (Password(..), Settings, charactersWithOptions)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Document (characterSet)
-
 
 {-
                        +---------------------------------------------+
@@ -60,48 +64,24 @@ import Web.DOM.Document (characterSet)
 -}
 
 --  https://github.com/ajnsit/purescript-formless-independent
-type FormValues = {
+
+-- ===================================================================================
+
+data Error
+  = Required
+  | NotNumber
+  | TooShort | TooLong
+
+-- ===================================================================================
+
+type Settings = {
     length              :: Int,
-    uppercaseLetters    :: Boolean,
-    numbers             :: Boolean,
-    lowercaseLetters    :: Boolean,
-    spaces              :: Boolean,
-    weirdchars          :: Boolean,
     characters          :: String
 }
 
-toFormValues :: Settings -> FormValues
-toFormValues s = {
-    length:             s.length,
-    uppercaseLetters:   s.options.uppercaseLetters,
-    lowercaseLetters:   s.options.lowercaseLetters,
-    numbers:            s.options.numbers,
-    spaces:             s.options.spaces,
-    weirdchars:         s.options.weirdchars,
-    characters:         s.characters
-}
-
-fromFormValues :: FormValues -> Settings
-fromFormValues v = {
-    length: v.length,
-    options: {
-        uppercaseLetters:   v.uppercaseLetters,
-        numbers:            v.numbers,
-        lowercaseLetters:   v.lowercaseLetters,
-        spaces:             v.spaces,
-        weirdchars:         v.weirdchars
-    },
-    characters:             v.characters
-}
-
+newtype SettingsForm :: (Row Type -> Type) -> (Type -> Type -> Type -> Type) -> Type
 newtype SettingsForm r f = SettingsForm (r (
-    --                       err   in       out
     length              :: f Error String   Int,
-    uppercaseLetters    :: f Error Boolean  Boolean,
-    numbers             :: f Error Boolean  Boolean,
-    lowercaseLetters    :: f Error Boolean  Boolean,
-    spaces              :: f Error Boolean  Boolean,
-    weirdchars          :: f Error Boolean  Boolean,
     characters          :: f Error String   String
 ))
 derive instance newtypeSettingsForm :: Newtype (SettingsForm r f) _
@@ -112,37 +92,20 @@ type SettingsValidators = SettingsForm Record (Formless.Validation SettingsForm 
 type SettingsFormState  = Formless.State SettingsForm (Widget HTML)
 
 formValues :: Settings -> SettingsInputForm
-formValues defaultSettings = Formless.wrapInputFields {
+formValues values = Formless.wrapInputFields {
     length:             show values.length,
-    uppercaseLetters:   values.uppercaseLetters,
-    lowercaseLetters:   values.lowercaseLetters,
-    numbers:            values.numbers,
-    spaces:             values.spaces,
-    weirdchars:         values.weirdchars,
     characters:         values.characters
 }
-    where values = toFormValues defaultSettings
 
-data Error
-  = Required
-  | NotNumber
-  | TooShort | TooLong
 
+-- ===================================================================================
+{-
 toText :: Error -> String
 toText Required     = "This field is required."
 toText NotNumber    = "Not a number."
 toText TooShort     = "This length is too short."
 toText TooLong      = "This length is too long."
   
-isNonEmpty :: ∀ form m. Monad m => Formless.Validation form m Error String String
-isNonEmpty = Formless.hoistFnE_ $ \str -> if null str then Left Required else Right str
-
-isNumber :: ∀ form m. Monad m => Formless.Validation form m Error String Int 
-isNumber = Formless.hoistFnE_ $ (note NotNumber) <<< fromString
-
-inRange :: ∀ form m. Monad m => Int -> Int -> Formless.Validation form m Error Int Int
-inRange l t = Formless.hoistFnE_ $ \x -> if (x < l) then Left TooShort     else if (x > t) then Left TooLong     else Right x
-
 noValidation :: ∀ form m a. Monad m => Formless.Validation form m Error a a
 noValidation = Formless.hoistFnE_ $ Right
 
@@ -160,27 +123,14 @@ stringLengthInRange l t = Formless.hoistFnE_ $ checkLength
     where
         checkLength v = if ((length v) < l) then Left TooShort     else if (length v > t) then Left TooLong     else Right v
 
-stringLengthGreaterThan :: ∀ form m. Monad m => Int -> Formless.Validation form m Error String String
-stringLengthGreaterThan l = Formless.hoistFnE_ $ checkLength
-    where
-        checkLength v = if ((length v) < l) then Left TooShort else Right v
-
 noopValidation :: ∀ form m a. Monad m => Formless.Validation form m Error a a
 noopValidation = Formless.hoistFn_ identity
 
-validators :: SettingsValidators
-validators = SettingsForm {
+settingValidators :: SettingsValidators
+settingValidators = SettingsForm {
     length:             isNumber >>> inRange 6 99,
-    -- length:             inRange 6 99,
-    uppercaseLetters:   noopValidation,
-    lowercaseLetters:   noopValidation,
-    numbers:            noopValidation,
-    spaces:             noopValidation,
-    weirdchars:         noopValidation,
-    -- characters:         isNonEmpty >>> (stringLengthInRange 4 10)
     characters:         isNonEmpty >>> (stringLengthGreaterThan 6)
 }
-
 
 unsafeTargetChecked ::
     forall r.
@@ -188,8 +138,64 @@ unsafeTargetChecked ::
     Boolean
 unsafeTargetChecked e = (unsafeCoerce e).target.checked
 
+-}
+
+isNumber :: ∀ form m. Monad m => Formless.Validation form m Error String Int 
+isNumber = Formless.hoistFnE_ $ (note NotNumber) <<< fromString
+
+inRange :: ∀ form m. Monad m => Int -> Int -> Formless.Validation form m Error Int Int
+inRange l t = Formless.hoistFnE_ $ \x -> if (x < l) then Left TooShort     else if (x > t) then Left TooLong     else Right x
+
+isNonEmpty :: ∀ form m. Monad m => Formless.Validation form m Error String String
+isNonEmpty = Formless.hoistFnE_ $ \str -> if null str then Left Required else Right str
+
+stringLengthGreaterThan :: ∀ form m. Monad m => Int -> Formless.Validation form m Error String String
+stringLengthGreaterThan l = Formless.hoistFnE_ $ checkLength
+    where
+        checkLength v = if ((length v) < l) then Left TooShort else Right v
+
+
+toText :: Error -> String
+toText _     = "ERRORE"
+
+settingValidators :: SettingsValidators
+settingValidators = SettingsForm {
+    length:             isNumber >>> inRange 6 99,
+    characters:         isNonEmpty >>> (stringLengthGreaterThan 6)
+}
+
+-- ===================================================================
+
+data Password = Password String
+instance showPassword :: Show Password where
+    show (Password p) = "password[" <> p <> "]"
+
+randomPassword :: Int -> String -> Aff Password
+randomPassword l characters = map Password $ appendRandomChars (repeatStringUpToSize 256 characters) l ""
+    where
+        appendRandomChars :: String -> Int -> String -> Aff String
+        appendRandomChars chars n p | n <= length p = pure (take n p)
+        appendRandomChars chars n p = do
+            bytes <- randomBytes (n - (length p))
+            appendRandomChars chars n (p <> (foldMapBytesToString (characterAtIndex chars) bytes))
+
+        characterAtIndex :: String -> Int -> String
+        characterAtIndex s 0 = take 1 s
+        characterAtIndex s i | i < length s = take 1 (drop i s)
+        characterAtIndex s i = ""
+
+        repeatStringUpToSize :: Int -> String -> String
+        repeatStringUpToSize n s = repeatStringUpToSize' n s s
+            where
+                repeatStringUpToSize' :: Int -> String -> String -> String
+                repeatStringUpToSize' n "" a = ""
+                repeatStringUpToSize' n s  a | (length a) + (length s) <= n = repeatStringUpToSize' n s (a <> s)
+                repeatStringUpToSize' n s  a = a
+
+-- ===================================================================
+
 settingsWidget :: Settings -> Widget HTML Settings
-settingsWidget settings = go (Formless.initFormState (formValues settings) validators)
+settingsWidget settings = go (Formless.initFormState (formValues settings) settingValidators)
     where
         go fstate = do
             query :: Formless.Query SettingsForm <-
@@ -202,54 +208,6 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) valid
                         ],
                         errorDisplay $ Formless.getError _length fstate.form
                     ],
-
-                    div [] [
-                        input [
-                            Props._type "checkbox",
-                            Props.checked $ Formless.getInput _uppercaseLetters fstate.form,
-                            (Formless.setValidate _uppercaseLetters <<< unsafeTargetChecked) <$> Props.onChange
-                        ],
-                        text "uppercase letters",
-                        errorDisplay $ Formless.getError _uppercaseLetters fstate.form
-                    ],
-
-                    div [] [
-                        input [
-                            Props._type "checkbox",
-                            Props.checked $ Formless.getInput _lowercaseLetters fstate.form,
-                            (Formless.setValidate _lowercaseLetters <<< unsafeTargetChecked) <$> Props.onChange
-                        ],
-                        text "lowercase letters",
-                        errorDisplay $ Formless.getError _lowercaseLetters fstate.form
-                    ],
-                    div [] [
-                        input [
-                            Props._type "checkbox",
-                            Props.checked $ Formless.getInput _numbers fstate.form,
-                            (Formless.setValidate _numbers <<< unsafeTargetChecked) <$> Props.onChange
-                        ],
-                        text "numbers",
-                        errorDisplay $ Formless.getError _numbers fstate.form
-                    ],
-                    div [] [
-                        input [
-                            Props._type "checkbox",
-                            Props.checked $ Formless.getInput _spaces fstate.form,
-                            (Formless.setValidate _spaces <<< unsafeTargetChecked) <$> Props.onChange
-                        ],
-                        text "spaces",
-                        errorDisplay $ Formless.getError _spaces fstate.form
-                    ],
-                    div [] [
-                        input [
-                            Props._type "checkbox",
-                            Props.checked $ Formless.getInput _weirdchars fstate.form,
-                            (Formless.setValidate _weirdchars <<< unsafeTargetChecked) <$> Props.onChange
-                        ],
-                        text "weird chars",
-                        errorDisplay $ Formless.getError _weirdchars fstate.form
-                    ],
-
                     div [] [
                         input [
                             Props.value $ Formless.getInput _characters fstate.form,
@@ -265,17 +223,13 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) valid
                     liftEffect (Effect.Console.log $ "SETTINGS NOT VALID - keep handling form")
                     go state
                 Right form  -> do
-                    let values = fromFormValues $ Formless.unwrapOutputFields form :: Settings
+                    -- let values = fromFormValues $ Formless.unwrapOutputFields form :: Settings
+                    let values = Formless.unwrapOutputFields form :: Settings
                     liftEffect (Effect.Console.log $ "SUBMIT - return values")
                     pure values
 
             where
                 _length             = SProxy :: SProxy "length"
-                _uppercaseLetters   = SProxy :: SProxy "uppercaseLetters"
-                _lowercaseLetters   = SProxy :: SProxy "lowercaseLetters"
-                _numbers            = SProxy :: SProxy "numbers"
-                _spaces             = SProxy :: SProxy "spaces"
-                _weirdchars         = SProxy :: SProxy "weirdchars"
                 _characters         = SProxy :: SProxy "characters"
 
                 errorDisplay = maybe mempty (\err -> div [Props.style {color: "red"}] [text $ toText err])
@@ -284,7 +238,7 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) valid
 suggestionWidget :: Password -> Widget HTML PasswordEvent
 suggestionWidget password@(Password passwordValue) = do
     div [Props.className "password"] [
-        input [Props._type "text", Props.value passwordValue],
+        input [Props._type "text", Props.defaultValue passwordValue],
         button [Props.onClick]  [text "New suggestion"] $> RegeneratePassword,
         button [Props.onClick]  [text "return"] $> (ReturnPassword password)
     ]
@@ -295,10 +249,6 @@ data Event = UpdateSettings Settings | UpdatePassword PasswordEvent
 widget :: Settings -> Widget HTML Password
 widget settings = do
     let password = Password "pippo" :: Password
-    -- password :: Password <- PRNG.generatePassword (settingsFromFormState formState)
-    --  PRNG :: Int -> Effect Bytes
-    --  generatePassword :: (Length, Chars) -> PRNG -> password
-    
     event :: Event <- (map UpdateSettings (settingsWidget settings)) <|> (map UpdatePassword (suggestionWidget password))
     case event of
         UpdateSettings settings' -> widget settings'

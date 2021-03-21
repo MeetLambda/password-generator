@@ -4,9 +4,10 @@
 
 Compiling the [`purescript`](http://www.purescript.org) code, supposing [`nvm`](http://nvm.sh) is already installed, is as simple as typing:
 
-    > nvm install --lts (12.16.1)
+    > nvm install --lts (14.16.0)
+    > npm install -g npm
     > npm install -g purescript spago    parcel-bundler sass     yarn
-    --               @0.13.8    @0.19.0  @1.12.4        @1.32.4  @1.22.10
+    --               @0.14.0    @0.19.1  @1.12.4        @1.32.8  @1.22.10
     > yarn clean; yarn build
     > yarn docs
     > yarn develop-app
@@ -43,3 +44,10 @@ These are the commands to retrieve these libraries:
     > git clone	https://github.com/purescript-concur/purescript-concur-react.git ../purescript-concur-react
     > git clone https://github.com/ajnsit/purescript-formless-independent.git ../purescript-formless-independent
 
+
+
+# Interesting links
+
+- https://qiita.com/kimagure/items/08c59fa21adcd6968ae1
+- https://stackoverflow.com/questions/37231474/typeclass-instance-with-row-type-in-instance-head
+- https://github.com/paf31/24-days-of-purescript-2016/blob/master/10.markdown

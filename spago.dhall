@@ -5,9 +5,9 @@
   , "console"
   , "effect"
   , "fortuna"
-  , "halogen-formless"
+  , "formless"
   , "newtype"
-  , "payload"
+  -- , "payload"
   , "test-unit"
   ]
 , packages = ./packages.dhall

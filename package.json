@@ -3,25 +3,27 @@
     "scripts": {
         "build": "spago --jobs 10 build --purs-args '--codegen js,sourcemaps --verbose-errors'",
         "rebuild": "clear; yarn clean; yarn build",
-        "develop-purs": "spago --jobs 10 build --watch --clear-screen --purs-args '--codegen js,sourcemaps --verbose-errors'",
-        "develop-app": "parcel --host 0.0.0.0 --out-dir ./output ./src/html/index.html",
-        "go": "parcel --host 0.0.0.0 --out-dir ./output ./src/html/index.html",
+        "keep-building": "spago --jobs 10 build --watch --clear-screen --purs-args '--codegen js,sourcemaps --verbose-errors'",
+        "develop-purs":  "spago --jobs 10 build --watch --clear-screen --purs-args '--codegen js,sourcemaps --verbose-errors'",
+        "develop-app": "parcel --host 0.0.0.0 --out-dir ./output.parcel ./src/html/index.html ./output",
+        "go":          "parcel --host 0.0.0.0 --out-dir ./output.parcel ./src/html/index.html ./output",
         "verify": "yarn clean && spago verify-set",
         "docs": "spago docs --open",
         "clean": "while read gitIgnorePattern; do rm -rf .${gitIgnorePattern}; done < .gitignore"
     },
     "engines": {
-        "yarn": "^1.17.3"
+        "yarn": "1.22.10"
     },
     "devDependencies": {
-        "sass": "^1.32.8"
+        "sass": "1.32.8"
     },
     "dependencies": {
-        "parcel": "^1.12.4",
-        "purescript": "^0.13.6",
-        "purty": "^6.3.0",
-        "react": "^17.0.1",
-        "react-dom": "^17.0.1",
-        "spago": "^0.15.2"
+        "parcel-bundler": "1.12.5",
+        "purescript": "0.14.0",
+        "react": "17.0.2",
+        "react-dom": "17.0.2",
+        "spago": "0.20.0"
     }
 }
+
+

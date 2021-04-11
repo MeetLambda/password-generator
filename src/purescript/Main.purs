@@ -10,3 +10,4 @@ import Widgets.Main as Widgets.Main
 main :: Effect Unit
 main = do
     runWidgetInDom "app" Widgets.Main.widget
+    -- runWidgetInDom "app" Widgets.Test.Keyboard.keypadWidget

@@ -11,3 +11,4 @@
 /target
 /.cache
 /package-lock.json
+/output.parcel

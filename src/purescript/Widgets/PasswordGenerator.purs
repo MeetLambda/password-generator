@@ -1,23 +1,30 @@
 module Widgets.PasswordGenerator where
   
+import Bytes (Bytes, foldMapBytesToString)
 import Concur.Core (Widget)
 import Concur.Core.Gen (runWidget)
 import Concur.React (HTML)
-import Concur.React.DOM (div, text, h2, h4, a, p, span, button, form, label, input, fieldset, legend)
+import Concur.React.DOM (div, text, h1, h2, h4, ul, li, a, p, span, button, form, label, input, fieldset, legend)
+import Concur.React.Props (placeholder, value)
 import Concur.React.Props as Props
 import Control.Alt ((<|>))
 import Control.Applicative (pure)
 import Control.Apply ((<*>))
 import Control.Bind (bind, discard, (=<<), (>>=))
 import Control.Monad (class Monad)
+import Control.Monad.Rec.Class (forever)
+import Control.Monad.State.Trans (StateT, runStateT)
+import Control.Plus (empty)
 import Control.Semigroupoid ((<<<), (>>>))
 import Data.Boolean (otherwise)
-import Data.Either (Either(..), note)
-import Data.Function (identity, ($))
-import Data.Functor (map, ($>), (<$>))
+import Data.DateTime.Instant (unInstant, toDateTime)
+import Data.Either (Either(..), note, hush)
+import Data.Formatter.DateTime (Formatter, format, parseFormatString)
+import Data.Function (identity, ($), flip)
+import Data.Functor (map, void, (<$), ($>), (<$>))
 import Data.Int (fromString)
 import Data.Lens.Lens (Lens'(..), lens)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe, fromMaybe)
 import Data.Monoid (mempty)
 import Data.Newtype (class Newtype)
 import Data.Ord ((<=), (<), (>), (>=))
@@ -29,20 +36,24 @@ import Data.Show (show, class Show)
 import Data.String.CodePoints (length, take, drop)
 import Data.String.Common (null)
 import Data.Symbol (SProxy(..))
+import Data.Time.Duration (Milliseconds(..), negateDuration)
+import Data.Tuple (Tuple(..))
+import Data.Unit (Unit, unit)
 import Data.Void (Void)
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Fiber, delay, forkAff, joinFiber, launchAff, try)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console as Effect.Console
-import Bytes (Bytes, foldMapBytesToString)
 import Effect.Fortuna (randomBytes)
--- import Effect.Fortuna as PRNG
+import Effect.Now (now)
 import Formless as Formless
 import React.DOM.Dynamic (p, s)
 import React.SyntheticEvent (SyntheticEvent_)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Document (characterSet)
+import Web.HTML.Event.EventTypes (offline)
+import Web.HTML.HTMLHyperlinkElementUtils (password)
 
 {-
                        +---------------------------------------------+
@@ -223,7 +234,6 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) setti
                     liftEffect (Effect.Console.log $ "SETTINGS NOT VALID - keep handling form")
                     go state
                 Right form  -> do
-                    -- let values = fromFormValues $ Formless.unwrapOutputFields form :: Settings
                     let values = Formless.unwrapOutputFields form :: Settings
                     liftEffect (Effect.Console.log $ "SUBMIT - return values")
                     pure values
@@ -235,10 +245,25 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) setti
                 errorDisplay = maybe mempty (\err -> div [Props.style {color: "red"}] [text $ toText err])
 
 
-suggestionWidget :: Password -> Widget HTML PasswordEvent
-suggestionWidget password@(Password passwordValue) = do
+passwordValue :: Password -> String
+passwordValue (Password password) = password
+
+suggestionWidget :: AsyncValue Password -> Widget HTML PasswordEvent
+suggestionWidget (Loading placeholder) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
+    div [Props.className "password loading"] [
+        input [Props._type "text", Props.disabled true, Props.defaultValue placeholderValue],
+        button [Props.disabled true]  [text "New suggestion"],
+        button [Props.disabled true]  [text "return"]
+    ]
+    where
+        placeholderValue :: String
+        placeholderValue = fromMaybe "---" (map passwordValue placeholder)
+
+suggestionWidget (Done password) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
     div [Props.className "password"] [
-        input [Props._type "text", Props.defaultValue passwordValue],
+        input [Props._type "text", Props.value $ passwordValue password],
         button [Props.onClick]  [text "New suggestion"] $> RegeneratePassword,
         button [Props.onClick]  [text "return"] $> (ReturnPassword password)
     ]
@@ -246,13 +271,72 @@ suggestionWidget password@(Password passwordValue) = do
 data PasswordEvent = RegeneratePassword | ReturnPassword Password
 data Event = UpdateSettings Settings | UpdatePassword PasswordEvent
 
-widget :: Settings -> Widget HTML Password
-widget settings = do
-    let password = Password "pippo" :: Password
-    event :: Event <- (map UpdateSettings (settingsWidget settings)) <|> (map UpdatePassword (suggestionWidget password))
-    case event of
-        UpdateSettings settings' -> widget settings'
-        UpdatePassword passwordEvent -> case passwordEvent of
-            RegeneratePassword -> widget settings
-            ReturnPassword password' -> pure password'
+-- ============================================================================
 
+data AsyncValueWithComputation a = AsyncValueWithComputation (Aff a) (AsyncValue a)
+data AsyncValue a = Loading (Maybe a) | Done a
+
+asyncWidget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
+asyncWidget settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidget"] [ asyncWidgetContent ]
+    where
+        asyncWidgetContent :: Widget HTML Password
+        asyncWidgetContent = do
+            password <- case value of
+                Loading placeholder -> do
+                    liftEffect (Effect.Console.log "loading")
+                    fiber :: Fiber Password <- liftAff $ forkAff computation
+                    password <- renderLoading placeholder fiber
+                    pure password
+                Done password -> do
+                    liftEffect (Effect.Console.log "done")
+                    pure password
+            liftEffect (Effect.Console.log $ "password: " <> passwordValue password)
+            render settings (Done password)
+
+        renderLoading :: (Maybe Password) -> (Fiber Password) -> Widget HTML Password
+        renderLoading placeholder fiber = (render settings (Loading placeholder)) <|> (liftAff $ joinFiber fiber)
+
+        render :: Settings -> AsyncValue Password -> Widget HTML Password
+        render s v = do
+            event :: Event  <-  (map UpdateSettings (settingsWidget s))
+                            <|> (map UpdatePassword (suggestionWidget v))
+            case event of
+                UpdateSettings settings' -> asyncWidget settings' (AsyncValueWithComputation computation v)
+                UpdatePassword passwordEvent -> case passwordEvent of
+                    RegeneratePassword -> asyncWidget settings (AsyncValueWithComputation computation v)
+                    ReturnPassword password' -> pure password'
+
+-- ====================================
+--
+--  Async execution
+--
+--  - https://blog.drewolson.org/asynchronous-purescript
+--  - https://github.com/JordanMartinez/purescript-jordans-reference/tree/latestRelease/21-Hello-World/02-Effect-and-Aff
+
+-- ============================================================================
+
+widget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
+widget s v = div [] [
+    asyncWidget s v,
+    clockWidget
+]
+
+-- ============================================================================
+
+clockWidget :: forall a. Widget HTML a
+clockWidget = forever do
+    renderClock <|> liftAff (delay (Milliseconds 1000.0))
+    where
+        renderClock :: forall a'. Widget HTML a'
+        renderClock = do
+            time <- liftEffect currentTime
+            div [Props.className "clock"] [text time]
+
+        currentTime :: Effect String
+        currentTime = do
+            t <- now
+            let nowDateTime = toDateTime t
+            let formatter = hush $ parseFormatString "HH:mm:ss" :: Maybe Formatter
+            pure $ maybe "---" (flip format nowDateTime) formatter
+
+-- ============================================================================

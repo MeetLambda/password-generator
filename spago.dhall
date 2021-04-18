@@ -17,6 +17,7 @@
   , "newtype"
   , "now"
   , "ordered-collections"
+  , "parallel"
   , "prelude"
   , "profunctor-lenses"
   , "react"

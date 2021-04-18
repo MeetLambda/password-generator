@@ -20,7 +20,7 @@ div.form {
     margin: 3px;
 }
 
-div.workingWidget {
+div.asyncWidgetRunner {
     border: 1px dashed purple;
     margin: 3px;
     padding: 0px;
@@ -28,7 +28,7 @@ div.workingWidget {
     min-height: 40px;
 }
 
-div.asyncWidget {
+div.outerComponent {
     border: 1px dashed orange;
     margin: 3px;
     padding: 0px;

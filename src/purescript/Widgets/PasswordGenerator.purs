@@ -3,8 +3,9 @@ module Widgets.PasswordGenerator where
 import Bytes (Bytes, foldMapBytesToString)
 import Concur.Core (Widget)
 import Concur.Core.Gen (runWidget)
+import Concur.Core.FRP (Signal, dyn, step, display)
 import Concur.React (HTML)
-import Concur.React.DOM (div, text, h1, h2, h4, ul, li, a, p, span, button, form, label, input, fieldset, legend)
+import Concur.React.DOM (div, div', text, h1, h2, h4, ul, li, a, p, span, button, form, label, input, fieldset, legend)
 import Concur.React.Props (placeholder, value)
 import Concur.React.Props as Props
 import Control.Alt ((<|>))
@@ -12,8 +13,9 @@ import Control.Applicative (pure)
 import Control.Apply ((<*>))
 import Control.Bind (bind, discard, (=<<), (>>=))
 import Control.Monad (class Monad)
-import Control.Monad.Rec.Class (forever)
+import Control.Monad.Rec.Class (forever, untilJust)
 import Control.Monad.State.Trans (StateT, runStateT)
+import Control.Parallel (parSequence)
 import Control.Plus (empty)
 import Control.Semigroupoid ((<<<), (>>>))
 import Data.Boolean (otherwise)
@@ -24,7 +26,7 @@ import Data.Function (identity, ($), flip)
 import Data.Functor (map, void, (<$), ($>), (<$>))
 import Data.Int (fromString)
 import Data.Lens.Lens (Lens'(..), lens)
-import Data.Maybe (Maybe(..), fromMaybe, maybe, fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, fromMaybe, maybe)
 import Data.Monoid (mempty)
 import Data.Newtype (class Newtype)
 import Data.Ord ((<=), (<), (>), (>=))
@@ -48,7 +50,7 @@ import Effect.Console as Effect.Console
 import Effect.Fortuna (randomBytes)
 import Effect.Now (now)
 import Formless as Formless
-import React.DOM.Dynamic (p, s)
+import React.DOM.Dynamic (a, p, s)
 import React.SyntheticEvent (SyntheticEvent_)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Document (characterSet)
@@ -259,7 +261,6 @@ suggestionWidget (Loading placeholder) = do
     where
         placeholderValue :: String
         placeholderValue = fromMaybe "---" (map passwordValue placeholder)
-
 suggestionWidget (Done password) = do
     liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
     div [Props.className "password"] [
@@ -271,11 +272,33 @@ suggestionWidget (Done password) = do
 data PasswordEvent = RegeneratePassword | ReturnPassword Password
 data Event = UpdateSettings Settings | UpdatePassword PasswordEvent
 
+
+suggestionWidget' :: AsyncValue Password -> Widget HTML (AsyncValue Password)
+suggestionWidget' (Loading placeholder) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
+    div [Props.className "password loading"] [
+        input [Props._type "text", Props.disabled true, Props.defaultValue placeholderValue],
+        button [Props.disabled true]  [text "New suggestion"],
+        button [Props.disabled true]  [text "return"]
+    ]
+    where
+        placeholderValue :: String
+        placeholderValue = fromMaybe "---" (map passwordValue placeholder)
+suggestionWidget' (Done password) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
+    div [Props.className "password"] [
+        input [Props._type "text", Props.value $ passwordValue password],
+        button [Props.onClick]  [text "New suggestion"] $> Loading (Just password),
+        button [Props.onClick]  [text "return"] $> (Done password)
+    ]
+
+
 -- ============================================================================
 
 data AsyncValueWithComputation a = AsyncValueWithComputation (Aff a) (AsyncValue a)
 data AsyncValue a = Loading (Maybe a) | Done a
 
+{-
 asyncWidget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
 asyncWidget settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidget"] [ asyncWidgetContent ]
     where
@@ -305,6 +328,60 @@ asyncWidget settings (AsyncValueWithComputation computation value) = div [Props.
                 UpdatePassword passwordEvent -> case passwordEvent of
                     RegeneratePassword -> asyncWidget settings (AsyncValueWithComputation computation v)
                     ReturnPassword password' -> pure password'
+-}
+-- ============================================================================
+
+asyncWidgetRunner :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
+asyncWidgetRunner settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidgetRunner"] [ (untilJust asyncWidgetContent) ]
+    where
+        asyncWidgetContent :: Widget HTML (Maybe Password)
+        asyncWidgetContent = do
+            password :: (Maybe Password) <- case value of
+                Loading placeholder -> do
+                    liftEffect (Effect.Console.log "loading")
+                    fiber :: Fiber Password <- liftAff $ forkAff computation
+                    password <- renderLoading placeholder fiber
+                    pure password
+                Done password -> do
+                    liftEffect (Effect.Console.log "done")
+                    pure $ Just password
+            liftEffect (Effect.Console.log $ "password: " <> show (map passwordValue password))
+            case password of
+                Nothing -> pure Nothing
+                Just password ->  render settings (Done password)
+
+        renderLoading :: (Maybe Password) -> (Fiber Password) -> Widget HTML (Maybe Password)
+        renderLoading placeholder fiber = (render settings (Loading placeholder)) <|> computeFiber fiber
+
+        computeFiber fiber = do
+            password <- (liftAff $ joinFiber fiber)
+            pure $ Just password
+
+        render :: Settings -> AsyncValue Password -> Widget HTML (Maybe Password)
+        render s v = do
+            event :: Event  <-  (map UpdateSettings (settingsWidget s))
+                            <|> (map UpdatePassword (suggestionWidget v))
+            case event of
+                UpdateSettings settings' -> pure Nothing -- asyncWidget settings' (AsyncValueWithComputation computation v)
+                UpdatePassword passwordEvent -> case passwordEvent of
+                    RegeneratePassword -> pure Nothing -- asyncWidget settings (AsyncValueWithComputation computation v)
+                    ReturnPassword password' -> pure (Just password')
+        
+-- ============================================================================
+
+outerComponent :: Settings -> Widget HTML Password
+outerComponent defaultSettings = div [Props.className "outerComponent"] [ innerComponent defaultSettings ]
+    where
+        innerComponent :: Settings -> Widget HTML Password
+        innerComponent settings = do
+            s <- div [Props.className "innerComponent"] [
+                settingsWidget settings
+                -- untilJust $ settingsComponent settings
+            ]
+            pure $ Password "pippo"
+
+        -- settingsComponent :: Settings -> Widget HTML (Maybe Password)
+        -- settingsComponent settings -> 
 
 -- ====================================
 --
@@ -317,12 +394,24 @@ asyncWidget settings (AsyncValueWithComputation computation value) = div [Props.
 
 widget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
 widget s v = div [] [
-    asyncWidget s v,
+    -- asyncWidget s v,
+    -- outerComponent s,
+    -- div [] [
+    --     h1 [] [text "dyn"],
+    --     dyn $ helloSignal ""
+    -- ],
+    -- div [] [
+    --     h1 [] [text "step"],
+    --     dyn $ helloSignal ""
+    -- ],
+    asyncWidgetRunner s v,
+    -- signalComponent s,
     clockWidget
 ]
 
 -- ============================================================================
 
+-- clockWidget :: forall a. Widget HTML a
 clockWidget :: forall a. Widget HTML a
 clockWidget = forever do
     renderClock <|> liftAff (delay (Milliseconds 1000.0))
@@ -338,5 +427,78 @@ clockWidget = forever do
             let nowDateTime = toDateTime t
             let formatter = hush $ parseFormatString "HH:mm:ss" :: Maybe Formatter
             pure $ maybe "---" (flip format nowDateTime) formatter
+
+-- ============================================================================
+{-
+helloWidget :: forall a. Widget HTML a
+helloWidget = do
+    p <- button [Props.onClick] [text "Say hello"]
+    void $ button [Props.onClick] [text "Say hello again"]  
+    text "Hello!"
+
+
+helloWidget' :: forall a. Widget HTML a
+helloWidget' = do
+    greetings :: String <- div [] [
+        "Hello" <$ button [Props.onClick] [text "Say Hello"],
+        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
+    ]
+    div [] [text (greetings <> " Sailor!")]
+
+helloWidget'' :: forall a. Widget HTML a
+helloWidget'' = div [] [ message ]
+    where
+        message = do
+            greetings :: String <- "Hello" <$ button [Props.onClick] [text "Say Hello"] <|> "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
+            text (greetings <> " Sailor!")
+-}
+
+helloWidget :: forall a. Widget HTML a
+helloWidget = do
+    greetings :: String <- div [] [
+        "Hello" <$ button [Props.onClick] [text "Say Hello"],
+        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
+    ]
+    div [] [text (greetings <> " Sailor!")]
+
+{-
+--
+--  S I G N A L
+--
+hello :: forall a. Widget HTML a
+hello = do
+    greeting <- div' [
+        "Hello" <$ button [Props.onClick] [text "Say Hello"],
+        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
+    ]
+    a <- text (greeting <> " Sailor") <|> button [Props.onClick] [text "restart"]
+    hello
+--}
+
+helloSignal :: String -> Signal HTML String
+helloSignal s = step s do
+    greeting <- div' [
+        "Hello" <$ button [Props.onClick] [text "Say Hello"],
+        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
+    ]
+    a <- text (greeting <> " Sailor") <|> button [Props.onClick] [text "restart"]
+    pure (helloSignal greeting)
+
+-- ============================================================================
+{-
+
+dyn      :: forall b a m. Monad m => SignalT m a        -> m b
+
+display  :: forall     m.                   m (SignalT m Unit) -> SignalT m Unit
+step     :: forall   a m.              a -> m (SignalT m a)    -> SignalT m a
+loopS    :: forall   a m. Monad m   => a -> (a -> SignalT m a) -> SignalT m a
+loopW    :: forall   a m. Monad m   => a -> (a -> m a)         -> SignalT m a
+
+hold     :: forall   a m. Monad m   => a -> m a -> SignalT m a
+fireOnce :: forall   a m. Monad m   => Plus m => m a -> SignalT m (Maybe a)
+foldp    :: forall b a m. Functor m => (a -> b -> a) -> a -> SignalT m b -> SignalT m a
+
+-}
+
 
 -- ============================================================================

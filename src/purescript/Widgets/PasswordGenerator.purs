@@ -237,7 +237,7 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) setti
                     go state
                 Right form  -> do
                     let values = Formless.unwrapOutputFields form :: Settings
-                    liftEffect (Effect.Console.log $ "SUBMIT - return values")
+                    liftEffect (Effect.Console.log $ "SUBMIT - return values: " <> (show values))
                     pure values
 
             where

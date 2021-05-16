@@ -1,61 +1,42 @@
 module Widgets.PasswordGenerator where
   
-import Bytes (Bytes, foldMapBytesToString)
+import Bytes (foldMapBytesToString)
 import Concur.Core (Widget)
-import Concur.Core.Gen (runWidget)
-import Concur.Core.FRP (Signal, dyn, step, display)
 import Concur.React (HTML)
-import Concur.React.DOM (div, div', text, h1, h2, h4, ul, li, a, p, span, button, form, label, input, fieldset, legend)
-import Concur.React.Props (placeholder, value)
+import Concur.React.DOM (div, text, button, input)
 import Concur.React.Props as Props
 import Control.Alt ((<|>))
 import Control.Applicative (pure)
-import Control.Apply ((<*>))
-import Control.Bind (bind, discard, (=<<), (>>=))
+import Control.Bind (bind, discard)
 import Control.Monad (class Monad)
-import Control.Monad.Rec.Class (forever, untilJust)
-import Control.Monad.State.Trans (StateT, runStateT)
-import Control.Parallel (parSequence)
-import Control.Plus (empty)
+import Control.Monad.Rec.Class (forever)
 import Control.Semigroupoid ((<<<), (>>>))
-import Data.Boolean (otherwise)
-import Data.DateTime.Instant (unInstant, toDateTime)
+import Data.DateTime.Instant (toDateTime)
 import Data.Either (Either(..), note, hush)
 import Data.Formatter.DateTime (Formatter, format, parseFormatString)
-import Data.Function (identity, ($), flip)
-import Data.Functor (map, void, (<$), ($>), (<$>))
+import Data.Function (($), flip)
+import Data.Functor (map, ($>), (<$>))
 import Data.Int (fromString)
-import Data.Lens.Lens (Lens'(..), lens)
-import Data.Maybe (Maybe(..), fromMaybe, fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Monoid (mempty)
 import Data.Newtype (class Newtype)
-import Data.Ord ((<=), (<), (>), (>=))
+import Data.Ord ((<=), (<), (>))
 import Data.Ring ((-))
-import Data.Semigroup (append, (<>))
+import Data.Semigroup ((<>))
 import Data.Semiring ((+))
-import Data.Set (member)
 import Data.Show (show, class Show)
 import Data.String.CodePoints (length, take, drop)
 import Data.String.Common (null)
 import Data.Symbol (SProxy(..))
-import Data.Time.Duration (Milliseconds(..), negateDuration)
-import Data.Tuple (Tuple(..))
-import Data.Unit (Unit, unit)
-import Data.Void (Void)
+import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
-import Effect.Aff (Aff, Fiber, delay, forkAff, joinFiber, launchAff, try)
+import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console as Effect.Console
 import Effect.Fortuna (randomBytes)
 import Effect.Now (now)
 import Formless as Formless
-import React.DOM.Dynamic (a, p, s)
-import React.SyntheticEvent (SyntheticEvent_)
-import Unsafe.Coerce (unsafeCoerce)
-import Web.DOM.Document (characterSet)
-import Web.HTML.Event.EventTypes (offline)
-import Web.HTML.HTMLHyperlinkElementUtils (password)
 
 {-
                        +---------------------------------------------+
@@ -201,9 +182,12 @@ randomPassword l characters = map Password $ appendRandomChars (repeatStringUpTo
         repeatStringUpToSize n s = repeatStringUpToSize' n s s
             where
                 repeatStringUpToSize' :: Int -> String -> String -> String
-                repeatStringUpToSize' n "" a = ""
-                repeatStringUpToSize' n s  a | (length a) + (length s) <= n = repeatStringUpToSize' n s (a <> s)
-                repeatStringUpToSize' n s  a = a
+                -- repeatStringUpToSize' n "" a = ""
+                -- repeatStringUpToSize' n s  a | (length a) + (length s) <= n = repeatStringUpToSize' n s (a <> s)
+                -- repeatStringUpToSize' n s  a = a
+                repeatStringUpToSize' _  ""  _ = ""
+                repeatStringUpToSize' n' s'  a | (length a) + (length s') <= n' = repeatStringUpToSize' n' s' (a <> s')
+                repeatStringUpToSize' _  _   a = a
 
 
 -- ===================================================================
@@ -251,7 +235,9 @@ settingsWidget settings = go (Formless.initFormState (formValues settings) setti
 passwordValue :: Password -> String
 passwordValue (Password password) = password
 
-suggestionWidget :: AsyncValue Password -> Widget HTML PasswordEvent
+-- ===============================================================
+
+suggestionWidget :: AsyncValue Password -> Widget HTML (Either (AsyncValue Password) Password)
 suggestionWidget (Loading placeholder) = do
     liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
     div [Props.className "password loading"] [
@@ -266,159 +252,19 @@ suggestionWidget (Done password) = do
     liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
     div [Props.className "password"] [
         input [Props._type "text", Props.value $ passwordValue password],
-        button [Props.onClick]  [text "New suggestion"] $> RegeneratePassword,
-        button [Props.onClick]  [text "return"] $> (ReturnPassword password)
+        button [Props.onClick]  [text "New suggestion"] $> (Left (Loading Nothing)),
+        button [Props.onClick]  [text "return"] $> (Right password)
     ]
-suggestionWidget (Return password) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - RETURN: " <> passwordValue password)
-    text "RETURN"
-
-suggestionWidget'' :: AsyncValue Password -> Widget HTML (AsyncValue Password)
-suggestionWidget'' (Loading placeholder) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
-    div [Props.className "password loading"] [
-        input [Props._type "text", Props.disabled true, Props.defaultValue placeholderValue],
-        button [Props.disabled true]  [text "New suggestion"],
-        button [Props.disabled true]  [text "return"]
-    ]
-    where
-        placeholderValue :: String
-        placeholderValue = fromMaybe "---" (map passwordValue placeholder)
-suggestionWidget'' (Done password) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
-    div [Props.className "password"] [
-        input [Props._type "text", Props.value $ passwordValue password],
-        button [Props.onClick]  [text "New suggestion"] $> (Loading (Just password)),
-        button [Props.onClick]  [text "return"] $> (Return password)
-    ]
-suggestionWidget'' (Return password) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - RETURN: " <> passwordValue password)
-    text "RETURN"
-
-suggestionWidget' :: AsyncValue Password -> Widget HTML (AsyncValue Password)
-suggestionWidget' (Loading placeholder) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
-    div [Props.className "password loading"] [
-        input [Props._type "text", Props.disabled true, Props.defaultValue placeholderValue]
-    ]
-    where
-        placeholderValue :: String
-        placeholderValue = fromMaybe "---" (map passwordValue placeholder)
-suggestionWidget' (Done password) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
-    div [Props.className "password"] [
-        input [Props._type "text", Props.value $ passwordValue password]
-    ]
-suggestionWidget' (Return password) = do
-    liftEffect (Effect.Console.log $ "suggestionWidget - RETURN: " <> passwordValue password)
-    text "RETURN"
-
-data PasswordEvent = RegeneratePassword | ReturnPassword Password
-instance showPasswordEvent :: Show PasswordEvent where
-    show RegeneratePassword = "regenerate password"
-    show (ReturnPassword p) = "return password[" <> show p <> "]"
-
-data Event = UpdateSettings Settings | UpdatePassword PasswordEvent
-
 
 -- ============================================================================
 
-data AsyncValueWithComputation a = AsyncValueWithComputation (Aff a) (AsyncValue a)
-data AsyncValue a = Loading (Maybe a) | Done a | Return a
+data AsyncValue a = Loading (Maybe a) | Done a
 instance showAsyncValue :: (Show a) => Show (AsyncValue a) where
     show (Loading p) = "loading[" <> show p <> "]"
     show (Done p) = "done[" <> show p <> "]"
-    show (Return p) = "return[" <> show p <> "]"
 
-
-
-{-
-asyncWidget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
-asyncWidget settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidget"] [ asyncWidgetContent ]
-    where
-        asyncWidgetContent :: Widget HTML Password
-        asyncWidgetContent = do
-            password <- case value of
-                Loading placeholder -> do
-                    liftEffect (Effect.Console.log "loading")
-                    fiber :: Fiber Password <- liftAff $ forkAff computation
-                    password <- renderLoading placeholder fiber
-                    pure password
-                Done password -> do
-                    liftEffect (Effect.Console.log "done")
-                    pure password
-            liftEffect (Effect.Console.log $ "password: " <> passwordValue password)
-            render settings (Done password)
-
-        renderLoading :: (Maybe Password) -> (Fiber Password) -> Widget HTML Password
-        renderLoading placeholder fiber = (render settings (Loading placeholder)) <|> (liftAff $ joinFiber fiber)
-
-        render :: Settings -> AsyncValue Password -> Widget HTML Password
-        render s v = do
-            event :: Event  <-  (map UpdateSettings (settingsWidget s))
-                            <|> (map UpdatePassword (suggestionWidget v))
-            case event of
-                UpdateSettings settings' -> asyncWidget settings' (AsyncValueWithComputation computation v)
-                UpdatePassword passwordEvent -> case passwordEvent of
-                    RegeneratePassword -> asyncWidget settings (AsyncValueWithComputation computation v)
-                    ReturnPassword password' -> pure password'
--}
 -- ============================================================================
 
--- asyncWidgetRunner :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
--- asyncWidgetRunner settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidgetRunner"] [ (untilJust asyncWidgetContent) ]
---     where
---         asyncWidgetContent :: Widget HTML (Maybe Password)
---         asyncWidgetContent = do
---             password :: (Maybe Password) <- case value of
---                 Loading placeholder -> do
---                     liftEffect (Effect.Console.log "loading")
---                     fiber :: Fiber Password <- liftAff $ forkAff computation
---                     password <- renderLoading placeholder fiber
---                     pure password
---                 Done password -> do
---                     liftEffect (Effect.Console.log "done")
---                     pure $ Just password
---             liftEffect (Effect.Console.log $ "password: " <> show (map passwordValue password))
---             case password of
---                 Nothing -> pure Nothing
---                 Just password ->  render settings (Done password)
-
---         renderLoading :: (Maybe Password) -> (Fiber Password) -> Widget HTML (Maybe Password)
---         renderLoading placeholder fiber = (render settings (Loading placeholder)) <|> computeFiber fiber
-
---         computeFiber fiber = do
---             password <- (liftAff $ joinFiber fiber)
---             pure $ Just password
-
---         render :: Settings -> AsyncValue Password -> Widget HTML (Maybe Password)
---         render s v = do
---             event :: Event  <-  (map UpdateSettings (settingsWidget s))
---                             <|> (map UpdatePassword (suggestionWidget v))
---             case event of
---                 UpdateSettings settings' -> pure Nothing -- asyncWidget settings' (AsyncValueWithComputation computation v)
---                 UpdatePassword passwordEvent -> case passwordEvent of
---                     RegeneratePassword -> pure Nothing -- asyncWidget settings (AsyncValueWithComputation computation v)
---                     ReturnPassword password' -> pure (Just password')
-        
--- ============================================================================
-
-outerComponent :: Settings -> Widget HTML Password
-outerComponent defaultSettings = div [Props.className "outerComponent"] [ innerComponent defaultSettings ]
-    where
-        innerComponent :: Settings -> Widget HTML Password
-        innerComponent settings = do
-            s <- div [Props.className "innerComponent"] [
-                settingsWidget settings
-                -- untilJust $ settingsComponent settings
-            ]
-            pure $ Password "pippo"
-
-        -- settingsComponent :: Settings -> Widget HTML (Maybe Password)
-        -- settingsComponent settings -> 
-
--- ====================================
---
 --  Async execution
 --
 --  - https://blog.drewolson.org/asynchronous-purescript
@@ -426,26 +272,6 @@ outerComponent defaultSettings = div [Props.className "outerComponent"] [ innerC
 
 -- ============================================================================
 
--- widget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
--- widget s v = div [] [
---     -- asyncWidget s v,
---     -- outerComponent s,
---     -- div [] [
---     --     h1 [] [text "dyn"],
---     --     dyn $ helloSignal ""
---     -- ],
---     -- div [] [
---     --     h1 [] [text "step"],
---     --     dyn $ helloSignal ""
---     -- ],
---     asyncWidgetRunner s v,
---     -- signalComponent s,
---     clockWidget
--- ]
-
--- ============================================================================
-
--- clockWidget :: forall a. Widget HTML a
 clockWidget :: forall a. Widget HTML a
 clockWidget = forever do
     renderClock <|> liftAff (delay (Milliseconds 1000.0))
@@ -461,78 +287,5 @@ clockWidget = forever do
             let nowDateTime = toDateTime t
             let formatter = hush $ parseFormatString "HH:mm:ss" :: Maybe Formatter
             pure $ maybe "---" (flip format nowDateTime) formatter
-
--- ============================================================================
-{-
-helloWidget :: forall a. Widget HTML a
-helloWidget = do
-    p <- button [Props.onClick] [text "Say hello"]
-    void $ button [Props.onClick] [text "Say hello again"]  
-    text "Hello!"
-
-
-helloWidget' :: forall a. Widget HTML a
-helloWidget' = do
-    greetings :: String <- div [] [
-        "Hello" <$ button [Props.onClick] [text "Say Hello"],
-        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
-    ]
-    div [] [text (greetings <> " Sailor!")]
-
-helloWidget'' :: forall a. Widget HTML a
-helloWidget'' = div [] [ message ]
-    where
-        message = do
-            greetings :: String <- "Hello" <$ button [Props.onClick] [text "Say Hello"] <|> "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
-            text (greetings <> " Sailor!")
--}
-
-helloWidget :: forall a. Widget HTML a
-helloWidget = do
-    greetings :: String <- div [] [
-        "Hello" <$ button [Props.onClick] [text "Say Hello"],
-        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
-    ]
-    div [] [text (greetings <> " Sailor!")]
-
-{-
---
---  S I G N A L
---
-hello :: forall a. Widget HTML a
-hello = do
-    greeting <- div' [
-        "Hello" <$ button [Props.onClick] [text "Say Hello"],
-        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
-    ]
-    a <- text (greeting <> " Sailor") <|> button [Props.onClick] [text "restart"]
-    hello
---}
-
-helloSignal :: String -> Signal HTML String
-helloSignal s = step s do
-    greeting <- div' [
-        "Hello" <$ button [Props.onClick] [text "Say Hello"],
-        "Namaste" <$ button [Props.onClick] [text "Say Namaste"]
-    ]
-    a <- text (greeting <> " Sailor") <|> button [Props.onClick] [text "restart"]
-    pure (helloSignal greeting)
-
--- ============================================================================
-{-
-
-dyn      :: forall b a m. Monad m => SignalT m a        -> m b
-
-display  :: forall     m.                   m (SignalT m Unit) -> SignalT m Unit
-step     :: forall   a m.              a -> m (SignalT m a)    -> SignalT m a
-loopS    :: forall   a m. Monad m   => a -> (a -> SignalT m a) -> SignalT m a
-loopW    :: forall   a m. Monad m   => a -> (a -> m a)         -> SignalT m a
-
-hold     :: forall   a m. Monad m   => a -> m a -> SignalT m a
-fireOnce :: forall   a m. Monad m   => Plus m => m a -> SignalT m (Maybe a)
-foldp    :: forall b a m. Functor m => (a -> b -> a) -> a -> SignalT m b -> SignalT m a
-
--}
-
 
 -- ============================================================================

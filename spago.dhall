@@ -16,18 +16,9 @@
   , "maybe"
   , "newtype"
   , "now"
-  , "ordered-collections"
-  , "parallel"
   , "prelude"
-  , "profunctor-lenses"
-  , "react"
   , "strings"
   , "tailrec"
-  , "transformers"
-  , "tuples"
-  , "unsafe-coerce"
-  , "web-dom"
-  , "web-html"
   ]
 , packages = ./packages.dhall
 }

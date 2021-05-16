@@ -1,6 +1,6 @@
 module Main where
 
-import Control.Bind (bind)
+-- import Control.Bind (bind)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Concur.React.Run (runWidgetInDom)

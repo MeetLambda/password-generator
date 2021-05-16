@@ -1,47 +1,41 @@
 module Widgets.Main where
 
 import Concur.Core (Widget)
-import Concur.Core.FRP (SignalT(..), demandLoop, display, dyn, fireOnce_, hold, justEffect, loopS, loopW, oneShot, stateLoopS, step)
+import Concur.Core.FRP (SignalT(..), always, demandLoop, display, dyn, demand, fireOnce, fireOnce_, hold, justEffect, justWait, loopS, loopW, oneShot, stateLoopS, step, update)
+import Concur.Core.Props (mkProp)
 import Concur.React (HTML)
-import Concur.React.DOM (text, h4)
+import Concur.React.DOM (text, h4, div, button)
+import Concur.React.Props as Props
+import Control.Alt ((<|>))
+import Control.Alternative (class Alternative)
 import Control.Applicative (pure)
-import Control.Bind (bind, discard)
+import Control.Bind (bind, discard, (>>=))
+import Control.Comonad (extract)
 import Control.Monad (class Monad)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (class Plus)
 import Control.Semigroupoid ((<<<))
 import Data.Either (Either(..))
 import Data.Function (($))
-import Data.Functor (map)
-import Data.Maybe (Maybe(..))
+import Data.Functor (map, void, (<$), ($>), (<$>))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Semigroup ((<>))
 import Data.Set (singleton)
 import Data.Show (show)
-import Data.Unit (Unit)
+import Data.Tuple (Tuple(..), fst, snd)
+import Data.Unit (Unit, unit)
 import Effect (Effect)
-import Effect.Aff (Aff, forkAff, joinFiber)
+import Effect.Aff (Aff, Fiber, forkAff, joinFiber, launchAff, runAff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
-import Widgets.PasswordGenerator (AsyncValue(..), AsyncValue, Password, Settings, randomPassword, settingsWidget)
+import Widgets.PasswordGenerator (AsyncValue(..), AsyncValue, Password(..), PasswordEvent(..), Settings, randomPassword, settingsWidget, suggestionWidget, suggestionWidget', suggestionWidget'')
 
 defaultSettings = {
     length              : 24,
     characters          : "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 } :: Settings
 
--- widget :: forall a. Widget HTML a
--- widget = do
---     -- password :: Widgets.PasswordGenerator.Password <- Widgets.PasswordGenerator.widget defaultSettings (Widgets.PasswordGenerator.Loading Nothing (Widgets.PasswordGenerator.randomPassword defaultSettings.length defaultSettings.characters))
---     let passwordComputation  :: Widgets.PasswordGenerator.Settings -> Aff Widgets.PasswordGenerator.Password
---         passwordComputation settings = (Widgets.PasswordGenerator.randomPassword settings.length settings.characters)
---     -- let defaultPasswordValue = Widgets.PasswordGenerator.Loading Nothing
---     let defaultPasswordValue = Widgets.PasswordGenerator.Loading (Just (Widgets.PasswordGenerator.Password "- - -"))
---     -- password :: Widgets.PasswordGenerator.Password <- Widgets.PasswordGenerator.widget defaultSettings (Widgets.PasswordGenerator.AsyncValueWithComputation passwordComputation defaultPasswordValue)
---     password :: Widgets.PasswordGenerator.Password <- Widgets.PasswordGenerator.widget defaultSettings (Widgets.PasswordGenerator.AsyncValueWithComputation passwordComputation defaultPasswordValue)
---     liftEffect (log ("PASSWORD: " <> (show password)))
---     widget
-            
 
 {-
 
@@ -50,9 +44,9 @@ defaultSettings = {
 --  This last produced value allows composition with other widgets even for never-ending widgets.
 
 dyn        :: forall b a m. Monad m =>      SignalT m a         -> m b                              --  Consume a closed signal to make a widget
-oneShot    :: forall   a m. Monad m =>      SignalT m (Maybe a) -> m a                              --  Run a signal once and return its value
+oneShot    :: forall   a m. Monad m =>      SignalT m (Maybe a) -> m a                              --  Run a signal once and return its value (aka demand)
 
-demand     :: forall   a m. Monad m =>             SignalT m (Maybe a)  -> m a                      --  Very useful to embed a signal in the middle of a widget
+demand     :: forall   a m. Monad m =>             SignalT m (Maybe a)  -> m a                      --  Very useful to embed a signal in the middle of a widget (aka oneShot)
 demand'    :: forall   a m. Monad m => (Maybe a -> SignalT m (Maybe a)) -> m a  
 
 display    :: forall     m.                 m (SignalT m Unit) -> SignalT m Unit                    --  Display a widget which returns a continuation
@@ -77,73 +71,64 @@ foldp      :: forall b a m. Functor m => (a -> b -> a) -> a -> SignalT m b -> Si
 demandLoop :: forall s a m. Monad m => Alternative m => s -> (s -> SignalT m (Either s a)) -> m a                       --  A Common pattern is demand + stateLoopS
 stateLoopS :: forall s a m. Monad m => Alternative m => s -> (s -> SignalT m (Either s a)) -> SignalT m (Maybe a)       --  A generalisation of `loopS` where, you have an inner loop state `s` and a final result `a`. The loop continues as long as `Left s` is returned. And ends when `Right a` is returned.
 debounce   :: forall   a m. Monad m => Alt m => MonadAff m => Number -> a -> (a -> m a) -> SignalT m a                  --  Debounced output from a widget wrapped into a signal
-
 -}
+
+widget :: forall a. Widget HTML a
+widget = run defaultSettings defaultPassword
+    where
+        run :: forall a'. Settings -> AsyncValue Password -> Widget HTML a'
+        run settings passwordAsyncValue = do -- Widget
+            password <- demand $ runComponent (Tuple settings passwordAsyncValue)
+            liftEffect (log $ "DONE: " <> show password)
+            text "DONE"
+
+        -- runComponent :: (Tuple Settings (AsyncValue Password)) -> SignalT (Widget HTML) (Either (Tuple Settings (AsyncValue Password)) Password)
+        runComponent :: (Tuple Settings (AsyncValue Password)) -> SignalT (Widget HTML) (Maybe Password)
+        runComponent (Tuple _settings _av) = do -- SignalT
+            --  s => (Tuple Settings (AsyncValue Password))
+            --  a => Password
+            stateLoopS (Tuple _settings _av) (\(Tuple settings av) -> do                
+                logSignal $ "[1] signal"
+                let ts = map (\s -> Tuple s av) (loopW settings settingsWidget)
+                t :: Tuple Settings (AsyncValue Password) <- ts -- map (\s -> Tuple s av) (loopW settings settingsWidget)
+
+                logSignal $ "[2] signal"
+                p :: AsyncValue Password <- justWait (snd t) (fireOnce (computePassword (fst t))) always
+
+                -- mp :: Maybe (AsyncValue Password) <- (fireOnce (computePassword (fst t)))
+                -- pure mp
+
+                -- p' :: AsyncValue Password <- loopW p suggestionWidget''
+                -- map (returnValue t) (loopW RegeneratePassword (\_ -> suggestionWidget p))
+
+                -- fireOnce (suggestionWidget p)
+                -- pe :: PasswordEvent <- justWait RegeneratePassword (fireOnce (suggestionWidget p)) always
+                -- map (returnValue t) $ justWait RegeneratePassword (fireOnce (\_ -> suggestionWidget p)) always
+
+                logSignal $ "[3] signal: " <> show p
+
+                --  poll       :: forall   a m. Monad m => SignalT m (m a) -> m (SignalT m a)                           --  Construct a signal by polling a signal with a nested widget for values
+
+                -- map (returnValue (fst t)) (loopW p (\_ -> suggestionWidget'' p))
+                map (returnValue (fst t)) (justWait p (fireOnce (suggestionWidget'' p)) always)
+
+
+
+            )
+
+        returnValue :: Settings -> AsyncValue Password -> (Either (Tuple Settings (AsyncValue Password)) Password) 
+        returnValue s av =
+            case av of
+                Loading l -> Left (Tuple s av)
+                Done p -> Left (Tuple s av)
+                Return p -> Right p
+-- ========================================================================================
+
+logSignal :: forall m. Monad m => Plus m => MonadEffect m => String -> SignalT m Unit
+logSignal s = fireOnce_ (liftEffect (log s))
 
 defaultPassword :: AsyncValue Password
 defaultPassword = Loading Nothing
 
-passwordGenerator :: Settings -> Aff Password
-passwordGenerator settings = randomPassword settings.length settings.characters
-
-widget :: forall a. Widget HTML a
-widget = run defaultSettings defaultPassword passwordGenerator
-    where
-        run :: forall a'. Settings -> AsyncValue Password -> (Settings -> Aff Password) -> Widget HTML a'
-        run settings passwordAsyncValue passwordGenerator' = do
-            -- settings' :: Settings <- dynSignal settings      --  dyn
-            settings' :: Settings <- dyn $ do
-                s <- loopW settings settingsWidget
-                logSignal $ "[1] signal: " <> show s
-
-            settings_1  :: Settings <- loopSignal settings     --  demandLoop
-            liftEffect (log $ "PASSOWORD [settings']: " <> show settings_1)
-            settings_2 :: Settings <- oneShotSignal settings  --  oneShot
-            liftEffect (log $ "PASSOWORD [settings'']: " <> show settings_2)
-            -- settings_3 :: Settings <- hold settings (settingsWidget settings)
-            -- liftEffect (log $ "PASSOWORD [settings']: " <> show settings_3)
-                                                                --  demand
-            -- settings' :: Settings <- stepSignal settings     --  step
-
-            liftEffect (log $ "DONE")
-            text "DONE"
-            -- run settings passwordAsyncValue passwordGenerator'
-
-        -- holdSignal :: Settings -> Widget HTML Settings
-        -- holdSignal settings = do
-        --     --  hold       :: forall   a m. Monad m   => a -> m a -> SignalT m a
-        --     --  step       :: forall   a m.              a -> m (SignalT m a)    -> SignalT m a                     --  Construct a signal from an initial value, and a step widget
-        --     result <- hold settings (settingsWidget settings)
-        --     pure result
-
-        oneShotSignal :: Settings -> Widget HTML Settings
-        oneShotSignal settings = do
-            -- oneShot 
-            result <- oneShot (map Just (loopW settings settingsWidget))
-            pure result
-
-        loopSignal :: Settings -> Widget HTML Settings
-        loopSignal settings = do
-            result <- demandLoop settings (\s -> map Right (loopW s settingsWidget))
-            pure result
-
-        -- dynSignal :: Settings -> Widget HTML Settings
-        -- dynSignal settings = do
-        --     result :: Settings <- dyn $ do
-        --         s :: Settings <- loopW  settings settingsWidget
-        --         logSignal $ "signal [settings']: " <> show s
-        --         -- display (text $ "DynSignal - Settings: " <> show s)
-        --     pure result
-
-        -- passwordEffect :: Settings -> (Settings -> Aff Password) -> Effect (AsyncValue Password)
-        -- passwordEffect s pg = do
-        --     p' <- do
-        --         fiber <- liftAff $ forkAff $ pg s
-        --         p <- liftAff $ joinFiber fiber
-        --         pure $ Done p
-        --     pure p'
-
-
-logSignal :: forall m. Monad m => Plus m => MonadEffect m => String -> SignalT m Unit
-logSignal s = fireOnce_ (liftEffect (log s))
--- logSignal = fireOnce_ <<< liftEffect <<< log
+computePassword :: Settings -> Widget HTML (AsyncValue Password)
+computePassword s = liftAff $ map Done (randomPassword s.length s.characters)

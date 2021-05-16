@@ -205,6 +205,7 @@ randomPassword l characters = map Password $ appendRandomChars (repeatStringUpTo
                 repeatStringUpToSize' n s  a | (length a) + (length s) <= n = repeatStringUpToSize' n s (a <> s)
                 repeatStringUpToSize' n s  a = a
 
+
 -- ===================================================================
 
 settingsWidget :: Settings -> Widget HTML Settings
@@ -268,13 +269,12 @@ suggestionWidget (Done password) = do
         button [Props.onClick]  [text "New suggestion"] $> RegeneratePassword,
         button [Props.onClick]  [text "return"] $> (ReturnPassword password)
     ]
+suggestionWidget (Return password) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - RETURN: " <> passwordValue password)
+    text "RETURN"
 
-data PasswordEvent = RegeneratePassword | ReturnPassword Password
-data Event = UpdateSettings Settings | UpdatePassword PasswordEvent
-
-
-suggestionWidget' :: AsyncValue Password -> Widget HTML (AsyncValue Password)
-suggestionWidget' (Loading placeholder) = do
+suggestionWidget'' :: AsyncValue Password -> Widget HTML (AsyncValue Password)
+suggestionWidget'' (Loading placeholder) = do
     liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
     div [Props.className "password loading"] [
         input [Props._type "text", Props.disabled true, Props.defaultValue placeholderValue],
@@ -284,19 +284,53 @@ suggestionWidget' (Loading placeholder) = do
     where
         placeholderValue :: String
         placeholderValue = fromMaybe "---" (map passwordValue placeholder)
-suggestionWidget' (Done password) = do
+suggestionWidget'' (Done password) = do
     liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
     div [Props.className "password"] [
         input [Props._type "text", Props.value $ passwordValue password],
-        button [Props.onClick]  [text "New suggestion"] $> Loading (Just password),
-        button [Props.onClick]  [text "return"] $> (Done password)
+        button [Props.onClick]  [text "New suggestion"] $> (Loading (Just password)),
+        button [Props.onClick]  [text "return"] $> (Return password)
     ]
+suggestionWidget'' (Return password) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - RETURN: " <> passwordValue password)
+    text "RETURN"
+
+suggestionWidget' :: AsyncValue Password -> Widget HTML (AsyncValue Password)
+suggestionWidget' (Loading placeholder) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - LOADING: " <> show placeholder)
+    div [Props.className "password loading"] [
+        input [Props._type "text", Props.disabled true, Props.defaultValue placeholderValue]
+    ]
+    where
+        placeholderValue :: String
+        placeholderValue = fromMaybe "---" (map passwordValue placeholder)
+suggestionWidget' (Done password) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - DONE: " <> passwordValue password)
+    div [Props.className "password"] [
+        input [Props._type "text", Props.value $ passwordValue password]
+    ]
+suggestionWidget' (Return password) = do
+    liftEffect (Effect.Console.log $ "suggestionWidget - RETURN: " <> passwordValue password)
+    text "RETURN"
+
+data PasswordEvent = RegeneratePassword | ReturnPassword Password
+instance showPasswordEvent :: Show PasswordEvent where
+    show RegeneratePassword = "regenerate password"
+    show (ReturnPassword p) = "return password[" <> show p <> "]"
+
+data Event = UpdateSettings Settings | UpdatePassword PasswordEvent
 
 
 -- ============================================================================
 
 data AsyncValueWithComputation a = AsyncValueWithComputation (Aff a) (AsyncValue a)
-data AsyncValue a = Loading (Maybe a) | Done a
+data AsyncValue a = Loading (Maybe a) | Done a | Return a
+instance showAsyncValue :: (Show a) => Show (AsyncValue a) where
+    show (Loading p) = "loading[" <> show p <> "]"
+    show (Done p) = "done[" <> show p <> "]"
+    show (Return p) = "return[" <> show p <> "]"
+
+
 
 {-
 asyncWidget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
@@ -331,41 +365,41 @@ asyncWidget settings (AsyncValueWithComputation computation value) = div [Props.
 -}
 -- ============================================================================
 
-asyncWidgetRunner :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
-asyncWidgetRunner settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidgetRunner"] [ (untilJust asyncWidgetContent) ]
-    where
-        asyncWidgetContent :: Widget HTML (Maybe Password)
-        asyncWidgetContent = do
-            password :: (Maybe Password) <- case value of
-                Loading placeholder -> do
-                    liftEffect (Effect.Console.log "loading")
-                    fiber :: Fiber Password <- liftAff $ forkAff computation
-                    password <- renderLoading placeholder fiber
-                    pure password
-                Done password -> do
-                    liftEffect (Effect.Console.log "done")
-                    pure $ Just password
-            liftEffect (Effect.Console.log $ "password: " <> show (map passwordValue password))
-            case password of
-                Nothing -> pure Nothing
-                Just password ->  render settings (Done password)
+-- asyncWidgetRunner :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
+-- asyncWidgetRunner settings (AsyncValueWithComputation computation value) = div [Props.className "asyncWidgetRunner"] [ (untilJust asyncWidgetContent) ]
+--     where
+--         asyncWidgetContent :: Widget HTML (Maybe Password)
+--         asyncWidgetContent = do
+--             password :: (Maybe Password) <- case value of
+--                 Loading placeholder -> do
+--                     liftEffect (Effect.Console.log "loading")
+--                     fiber :: Fiber Password <- liftAff $ forkAff computation
+--                     password <- renderLoading placeholder fiber
+--                     pure password
+--                 Done password -> do
+--                     liftEffect (Effect.Console.log "done")
+--                     pure $ Just password
+--             liftEffect (Effect.Console.log $ "password: " <> show (map passwordValue password))
+--             case password of
+--                 Nothing -> pure Nothing
+--                 Just password ->  render settings (Done password)
 
-        renderLoading :: (Maybe Password) -> (Fiber Password) -> Widget HTML (Maybe Password)
-        renderLoading placeholder fiber = (render settings (Loading placeholder)) <|> computeFiber fiber
+--         renderLoading :: (Maybe Password) -> (Fiber Password) -> Widget HTML (Maybe Password)
+--         renderLoading placeholder fiber = (render settings (Loading placeholder)) <|> computeFiber fiber
 
-        computeFiber fiber = do
-            password <- (liftAff $ joinFiber fiber)
-            pure $ Just password
+--         computeFiber fiber = do
+--             password <- (liftAff $ joinFiber fiber)
+--             pure $ Just password
 
-        render :: Settings -> AsyncValue Password -> Widget HTML (Maybe Password)
-        render s v = do
-            event :: Event  <-  (map UpdateSettings (settingsWidget s))
-                            <|> (map UpdatePassword (suggestionWidget v))
-            case event of
-                UpdateSettings settings' -> pure Nothing -- asyncWidget settings' (AsyncValueWithComputation computation v)
-                UpdatePassword passwordEvent -> case passwordEvent of
-                    RegeneratePassword -> pure Nothing -- asyncWidget settings (AsyncValueWithComputation computation v)
-                    ReturnPassword password' -> pure (Just password')
+--         render :: Settings -> AsyncValue Password -> Widget HTML (Maybe Password)
+--         render s v = do
+--             event :: Event  <-  (map UpdateSettings (settingsWidget s))
+--                             <|> (map UpdatePassword (suggestionWidget v))
+--             case event of
+--                 UpdateSettings settings' -> pure Nothing -- asyncWidget settings' (AsyncValueWithComputation computation v)
+--                 UpdatePassword passwordEvent -> case passwordEvent of
+--                     RegeneratePassword -> pure Nothing -- asyncWidget settings (AsyncValueWithComputation computation v)
+--                     ReturnPassword password' -> pure (Just password')
         
 -- ============================================================================
 
@@ -392,22 +426,22 @@ outerComponent defaultSettings = div [Props.className "outerComponent"] [ innerC
 
 -- ============================================================================
 
-widget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
-widget s v = div [] [
-    -- asyncWidget s v,
-    -- outerComponent s,
-    -- div [] [
-    --     h1 [] [text "dyn"],
-    --     dyn $ helloSignal ""
-    -- ],
-    -- div [] [
-    --     h1 [] [text "step"],
-    --     dyn $ helloSignal ""
-    -- ],
-    asyncWidgetRunner s v,
-    -- signalComponent s,
-    clockWidget
-]
+-- widget :: Settings -> AsyncValueWithComputation Password -> Widget HTML Password
+-- widget s v = div [] [
+--     -- asyncWidget s v,
+--     -- outerComponent s,
+--     -- div [] [
+--     --     h1 [] [text "dyn"],
+--     --     dyn $ helloSignal ""
+--     -- ],
+--     -- div [] [
+--     --     h1 [] [text "step"],
+--     --     dyn $ helloSignal ""
+--     -- ],
+--     asyncWidgetRunner s v,
+--     -- signalComponent s,
+--     clockWidget
+-- ]
 
 -- ============================================================================
 
